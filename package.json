@@ -1,0 +1,9 @@
+{
+  "name": "kaleos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kaleos: cuidado pastoral para la Iglesia de Dios Evangelio Completo de La Línea",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
