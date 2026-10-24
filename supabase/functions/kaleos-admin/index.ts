@@ -26,7 +26,7 @@ function newPin() {
   return String(a[0] % 1000000).padStart(6, "0");
 }
 
-export function memberEmail(slug: string, memberNo: string) {
+function memberEmail(slug: string, memberNo: string) {
   return `${memberNo.toLowerCase()}@${slug}.kaleos.app`;
 }
 
