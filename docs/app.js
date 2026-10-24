@@ -96,7 +96,7 @@
 
   // ===== arranque =====
   async function boot() {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
     if (!cfg.url || !cfg.anonKey) {
       app.innerHTML = `<div class="splash"><h1>Kaleos</h1><p>Falta configurar la conexión con la base de datos.</p></div>`;
       return;
@@ -129,7 +129,7 @@
   // ===== inicio de sesión =====
   function renderLogin(msg) {
     app.innerHTML = `<div class="splash">
-      <img src="/img/mark-w.png" alt="" class="mk"><h1>Kaleos</h1><div class="rule"></div>
+      <img src="./img/mark-w.png" alt="" class="mk"><h1>Kaleos</h1><div class="rule"></div>
       <div class="org">IGLESIA DE DIOS E.C.</div><div class="org thin">La Línea</div>
       <form class="login" id="f" autocomplete="on">
         <div class="field"><label for="no">Número de miembro</label>
@@ -152,7 +152,7 @@
 
   function renderSetup() {
     app.innerHTML = `<div class="splash">
-      <img src="/img/mark-w.png" alt="" class="mk"><h1>Kaleos</h1><div class="rule"></div>
+      <img src="./img/mark-w.png" alt="" class="mk"><h1>Kaleos</h1><div class="rule"></div>
       <div class="org">INSTALACIÓN · PRIMER PASTOR</div>
       <form class="login" id="f">
         <div class="field"><label for="k">Clave de instalación</label><input id="k" required autocomplete="off"></div>
@@ -160,7 +160,7 @@
         <div class="field"><label for="ph">Teléfono</label><input id="ph" inputmode="tel" placeholder="5555 5555"></div>
         <div class="field"><label for="pin">Elija un PIN de 6 números</label><input id="pin" inputmode="numeric" pattern="\\d{6}" maxlength="6" required></div>
         <button class="btn" id="go">Crear cuenta de pastor</button>
-        <div class="help"><a href="/">Volver al inicio</a></div>
+        <div class="help"><a href="./">Volver al inicio</a></div>
       </form></div>`;
     $("#f").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -171,7 +171,7 @@
           full_name: $("#n").value, title: "Pastor", phone: $("#ph").value, pin });
         const { error } = await sb.auth.signInWithPassword({ email: emailFor(r.member_no), password: pin });
         if (error) throw error;
-        history.replaceState(null, "", "/");
+        history.replaceState(null, "", location.pathname);
         await loadMe();
         sheet("Cuenta creada", `<div class="secret"><span class="small">Su número de miembro</span><b>${esc(r.member_no)}</b></div>
           <p>Entre siempre con este número y su PIN. Ya puede agregar a los hermanos desde <b>Hermanos</b>.</p>
@@ -199,7 +199,7 @@
   }
 
   function header() {
-    return `<header class="top"><img src="/img/logo.png" alt="La Línea, Iglesia de Dios E.C."><span class="brand">Kaleos</span>
+    return `<header class="top"><img src="./img/logo.png" alt="La Línea, Iglesia de Dios E.C."><span class="brand">Kaleos</span>
       <div class="who"><b>${esc(me.title)} ${esc(me.full_name.split(" ")[0])}</b>${ROLE_NAME[me.role]}</div>
       <button class="icon-btn" id="logout" aria-label="Salir" title="Salir">⎋</button></header>`;
   }
@@ -230,14 +230,14 @@
     const first = me.full_name.split(" ")[0];
     el.innerHTML = `
       ${bday ? `<div class="small">Hoy, ${fmtDate(today(), "dm")}</div>
-      <div class="card bday"><div class="head"><img src="/img/logo.png" alt=""><span class="badge">HOY</span></div>
+      <div class="card bday"><div class="head"><img src="./img/logo.png" alt=""><span class="badge">HOY</span></div>
         <div class="greet">¡Feliz cumpleaños, ${esc(first)}!</div>
         <div class="verse">${esc(v[0])} ${esc(v[1])}</div>
         <div class="from">Del pastor y toda la congregación</div></div>
       <button class="big-btn" id="pray"><i>🙏</i>Pedir oración</button>` : ""}
       <div class="small">Mi membresía</div>
       <div class="card">
-        <div class="head"><img src="/img/logo.png" alt=""><span class="badge ${me.role}">${ROLE_NAME[me.role].toUpperCase()}</span></div>
+        <div class="head"><img src="./img/logo.png" alt=""><span class="badge ${me.role}">${ROLE_NAME[me.role].toUpperCase()}</span></div>
         <div class="whoami"><div class="avatar">${esc(initials(me.full_name))}</div>
           <div><div class="name">${esc(me.title)} ${esc(me.full_name)}</div><div class="role">${esc(STAGE_NAME[me.stage])}</div>
           <div class="num">Nº ${esc(me.member_no)}</div></div></div>
@@ -312,7 +312,7 @@
     const n = await latestNotice();
     el.innerHTML = `<div class="small">Reverso de la tarjeta</div>
       <div class="card back">
-        <div class="bk-h"><img src="/img/mark-w.png" alt=""><h4>NUESTRA MISIÓN</h4></div>
+        <div class="bk-h"><img src="./img/mark-w.png" alt=""><h4>NUESTRA MISIÓN</h4></div>
         <p>${esc(church.mission || "")}</p><hr>
         <div class="notice"><b>${esc(n ? n.title : "Aviso de la semana")}</b><br>${n ? esc(n.body) : "Aún no hay avisos."}
           ${n ? `<br><button class="listen" id="listen">▶ Escuchar aviso</button>` : ""}</div>
@@ -542,7 +542,7 @@
   }
 
   function credentialsSheet(name, phone, no, pin) {
-    const msg = `Bendiciones, ${name.split(" ")[0]}. Su tarjeta de membresía de La Línea ya está en Kaleos.\n\nEntre en ${location.origin}\nNúmero de miembro: ${no}\nPIN: ${pin}\n\nGuarde este mensaje.`;
+    const msg = `Bendiciones, ${name.split(" ")[0]}. Su tarjeta de membresía de La Línea ya está en Kaleos.\n\nEntre en ${location.origin + location.pathname}\nNúmero de miembro: ${no}\nPIN: ${pin}\n\nGuarde este mensaje.`;
     sheet("Tarjeta lista", `<p style="margin:0">Entréguele estos datos a <b>${esc(name)}</b>. El PIN solo se muestra esta vez.</p>
       <div class="secret"><span class="small">Número de miembro</span><b>${esc(no)}</b><span class="small">PIN</span><b>${esc(pin)}</b></div>
       ${phone ? `<a class="btn ok" style="text-align:center;text-decoration:none" target="_blank" rel="noopener" href="${waLink(phone, msg)}">Enviar por WhatsApp</a>` : ""}
@@ -593,7 +593,7 @@
     el.innerHTML = `<div class="row noprint"><h2 class="t">Reporte mensual</h2>
         <input type="month" id="m" value="${month}" class="search" style="width:auto;padding:8px" aria-label="Mes"></div>
       <div class="small noprint">Se arma solo con lo registrado en Kaleos.</div>
-      <div class="report"><div class="rh"><img src="/img/logo.png" alt=""><h5>REPORTE<br>MINISTERIAL</h5></div>
+      <div class="report"><div class="rh"><img src="./img/logo.png" alt=""><h5>REPORTE<br>MINISTERIAL</h5></div>
         <div class="small" style="text-transform:capitalize">${esc(mName)} · ${esc(church.short_name || church.name)}</div>
         ${rows.map(([l, v]) => `<div class="r">${l} <b>${v}</b></div>`).join("")}
         <div class="small" style="margin-top:6px">Pastor: ${esc(me.full_name)}</div>

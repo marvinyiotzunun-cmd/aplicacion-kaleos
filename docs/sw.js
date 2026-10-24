@@ -1,7 +1,7 @@
 // Guarda la app para que abra rápido y sin señal (los datos siempre vienen de la red)
-const CACHE = "kaleos-v1";
-const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/vendor/supabase.js", "/vendor/qrcode.js",
-  "/vendor/jsQR.js", "/img/logo.png", "/img/mark.png", "/img/mark-w.png", "/img/icon-192.png"];
+const CACHE = "kaleos-v2";
+const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./vendor/supabase.js", "./vendor/qrcode.js",
+  "./vendor/jsQR.js", "./img/logo.png", "./img/mark.png", "./img/mark-w.png", "./img/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -18,6 +18,6 @@ self.addEventListener("fetch", (e) => {
       const copy = r.clone();
       caches.open(CACHE).then((c) => c.put(e.request, copy));
       return r;
-    }).catch(() => caches.match(e.request).then((r) => r || caches.match("/index.html")))
+    }).catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
   );
 });
