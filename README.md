@@ -1,6 +1,6 @@
 # Kaleos
 
-App de cuidado pastoral de la **Iglesia de Dios Evangelio Completo de La Línea**: tarjeta de membresía con QR, asistencia por escaneo del ujier, camino del hermano (visitante → líder), cumpleaños con «Pedir oración», reverso con misión, aviso y predicación, panel del pastor (Cuidar, Formar, Reportar), Saludos del pastor (tarjetas personalizadas por cumpleaños, aniversarios y fechas especiales, enviadas por WhatsApp) y reporte mensual al Supervisor de Distrito.
+App de cuidado pastoral de la **Iglesia de Dios Evangelio Completo de La Línea**: tarjeta de membresía con QR, asistencia por escaneo del ujier, camino del hermano (visitante → líder), cumpleaños con «Pedir oración», reverso con misión, aviso y predicación, panel del pastor (Cuidar, Formar, Reportar), Saludos del pastor (tarjetas personalizadas por cumpleaños, aniversarios, fechas especiales, invitaciones y recordatorios, enviadas por WhatsApp, correo o al buzón «Mensajes» de la app) y reporte mensual al Supervisor de Distrito.
 
 ## Cómo está hecha
 - `docs/`: la app (PWA, HTML + JS sin compilación). Funciona sola en cualquier hosting estático e incluye `docs/config.js`.
@@ -9,7 +9,7 @@ App de cuidado pastoral de la **Iglesia de Dios Evangelio Completo de La Línea*
 - `supabase/functions/kaleos-admin/`: alta de hermanos y cambio de PIN (usa la clave de servicio).
 
 ## Roles
-- **Miembro**: ve su tarjeta, su camino, el reverso y pide oración.
+- **Miembro**: ve su tarjeta, sus mensajes del pastor, su camino, el reverso y pide oración.
 - **Ujier**: además escanea los códigos al entrar.
 - **Pastor**: panel, hermanos, saludos, escaneo, avisos, datos de la iglesia y reporte.
 
