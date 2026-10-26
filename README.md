@@ -23,4 +23,4 @@ Queda en https://marvinyiotzunun-cmd.github.io/aplicacion-kaleos/
 ## Publicación en Cloudflare Pages
 Cloudflare Pages está conectado a este repositorio: cada cambio en `main` se publica solo en https://aplicacion-kaleos.pages.dev
 Configuración: sin comando de compilación, directorio de salida `docs`.
-Para volver a una versión anterior: Cloudflare → Workers y Pages → kaleos → Implementaciones → «Revertir», o revertir el cambio en GitHub.
+Para volver a una versión anterior: Cloudflare → Workers y Pages → aplicacion-kaleos → Implementaciones → «Revertir», o revertir el cambio en GitHub.
