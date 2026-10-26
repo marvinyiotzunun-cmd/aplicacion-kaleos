@@ -136,6 +136,12 @@ h2.t{font-size:22px;margin:4px 0 0;color:var(--navy);font-weight:800}
 .secret{background:var(--ice);border-radius:14px;padding:14px;text-align:center}
 .secret b{font-size:28px;letter-spacing:.2em;color:var(--navy);display:block}
 
+/* saludos */
+.gcard{width:100%;height:auto;aspect-ratio:4/5;border-radius:14px;display:block;background:#E3E8F2;box-shadow:0 10px 26px rgba(30,39,71,.18)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:8px 14px;font-weight:700;font-size:15px;cursor:pointer;color:var(--navy)}
+.chip.on{background:var(--royal);border-color:var(--royal);color:#fff}
+
 /* reporte */
 .report{background:var(--white);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:6px;box-shadow:0 12px 30px rgba(30,39,71,.12);border:1px solid #E3E8F2}
 .report .rh{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--royal);padding-bottom:8px;margin-bottom:2px}
