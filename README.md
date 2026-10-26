@@ -19,3 +19,8 @@ Número de miembro (por ejemplo `LL-0001`) y un PIN de 6 números que entrega el
 ## Publicación en GitHub Pages
 En GitHub: Settings → Pages → Deploy from a branch → `main` / `/docs`.
 Queda en https://marvinyiotzunun-cmd.github.io/aplicacion-kaleos/
+
+## Publicación en Cloudflare Pages
+Cloudflare Pages está conectado a este repositorio: cada cambio en `main` se publica solo.
+Configuración: sin comando de compilación, directorio de salida `docs`.
+Para volver a una versión anterior: Cloudflare → Workers y Pages → kaleos → Implementaciones → «Revertir», o revertir el cambio en GitHub.
