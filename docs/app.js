@@ -182,7 +182,7 @@
 
   // ===== estructura con pestañas =====
   function tabsFor(role) {
-    if (role === "pastor") return [["panel", "🏠", "Panel"], ["hermanos", "👥", "Hermanos"], ["escanear", "📷", "Escanear"], ["reporte", "📊", "Reporte"], ["iglesia", "⛪", "Iglesia"]];
+    if (role === "pastor") return [["panel", "🏠", "Panel"], ["hermanos", "👥", "Hermanos"], ["saludos", "💌", "Saludos"], ["escanear", "📷", "Escanear"], ["reporte", "📊", "Reporte"], ["iglesia", "⛪", "Iglesia"]];
     const t = [["tarjeta", "🪪", "Tarjeta"], ["camino", "🛤️", "Camino"]];
     if (role === "usher") t.push(["escanear", "📷", "Escanear"]);
     t.push(["iglesia", "⛪", "Iglesia"]);
@@ -216,7 +216,7 @@
     });
     window.scrollTo(0, 0);
     const views = { tarjeta: viewCard, camino: viewPath, iglesia: me.role === "pastor" ? viewChurchAdmin : viewChurch,
-      escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport };
+      escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport, saludos: viewGreetings };
     Promise.resolve(views[name]($("#body"))).catch((e) => { $("#body").innerHTML = `<p class="muted">${esc(errMsg(e))}</p>`; });
   }
 
@@ -417,7 +417,7 @@
     el.innerHTML = `<h2 class="t">Panel del pastor</h2><div class="small">${p.members_total} hermanos en Kaleos</div>
       <div class="tile"><div class="lab c">Cuidar</div>
         ${list(p.birthdays, (b) => `<div class="row"><span class="grow">🎂 ${esc(b.name)} ${String(b.birthday).slice(5, 10) === t ? "cumple hoy" : "cumple el " + fmtDate(b.birthday, "dm")}</span>
-          ${b.phone ? `<a class="pill solid" target="_blank" rel="noopener" href="${waLink(b.phone, `¡Feliz cumpleaños, ${b.name.split(" ")[0]}! «Jehová te bendiga, y te guarde» (Números 6:24). Con cariño, su pastor y la iglesia de La Línea.`)}">Felicitar</a>` : ""}</div>`, "Nadie cumple años esta semana.")}
+          <button class="pill solid" data-greet="${b.id}">Felicitar</button></div>`, "Nadie cumple años esta semana.")}
         ${list(p.absent, (a) => `<div class="row"><span class="grow">${esc(a.name)} · ${Math.floor(daysAgo(a.last) / 7)} domingos sin venir</span>
           <button class="pill w" data-visit="${a.id}" data-name="${esc(a.name)}">Visitar</button></div>`, "Nadie lleva 3 domingos sin venir.")}
         <div class="row"><span class="grow">${p.prayers_new} ${p.prayers_new === 1 ? "petición de oración nueva" : "peticiones de oración nuevas"}</span><button class="pill b" id="prayers">Ver</button></div>
@@ -431,6 +431,13 @@
         <div class="row"><span class="grow">Reporte de ${MONTHS[Number(month.slice(5, 7)) - 1]}: ${rep.services} cultos registrados, ${rep.visits} visitas</span><button class="pill b" id="torep">Abrir</button></div>
       </div>`;
     el.querySelectorAll("[data-visit]").forEach((b) => b.addEventListener("click", () => visitSheet(b.dataset.visit, b.dataset.name, () => go("panel"))));
+    el.querySelectorAll("[data-greet]").forEach((btn) => btn.addEventListener("click", () => {
+      const b = p.birthdays.find((x) => x.id === btn.dataset.greet);
+      const md = String(b.birthday).slice(5, 10);
+      let d = today().slice(0, 4) + "-" + md;
+      if (d < today()) d = (Number(today().slice(0, 4)) + 1) + "-" + md;
+      greetSheet({ kind: "cumple", key: "cumple", date: d, m: { id: b.id, full_name: b.name, title: b.title, phone: b.phone } });
+    }));
     $("#prayers", el).addEventListener("click", prayersSheet);
     $("#torep", el).addEventListener("click", () => go("reporte"));
     const titles = { ready_baptism: "Listos para bautismo", ready_lead: "Listos para liderar", visitors_no_follow: "Visitantes sin seguimiento" };
@@ -507,12 +514,13 @@
       <div class="grid2">
         <div class="field"><label for="fsince">Miembro desde</label><input id="fsince" type="date" value="${esc(m.member_since || "")}"></div>
         <div class="field"><label for="fbap">Bautismo</label><input id="fbap" type="date" value="${esc(m.baptism_date || "")}"></div></div>
+      <div class="field"><label for="fwed">Aniversario de bodas (si es casado)</label><input id="fwed" type="date" value="${esc(m.wedding_date || "")}"></div>
       <div class="field"><label for="fserves">Sirve en</label><input id="fserves" value="${esc(m.serves_in || "")}" placeholder="Damas Dorcas, alabanza, ujieres…"></div>`;
   }
   function readFields(s) {
     const v = (id) => { const x = $("#" + id, s).value.trim(); return x === "" ? null : x; };
     return { title: v("ftitle"), full_name: v("fname"), stage: v("fstage"), role: v("frole"), phone: v("fphone"),
-      birthday: v("fbday"), member_since: v("fsince"), baptism_date: v("fbap"), serves_in: v("fserves") };
+      birthday: v("fbday"), member_since: v("fsince"), baptism_date: v("fbap"), wedding_date: v("fwed"), serves_in: v("fserves") };
   }
 
   function memberForm(m) {
@@ -534,6 +542,7 @@
             go("hermanos");
           } else {
             const r = await callAdmin({ action: "create_member", ...f });
+            if (f.wedding_date && r.id) await sb.from("kaleos_profiles").update({ wedding_date: f.wedding_date }).eq("id", r.id);
             close(); go("hermanos"); credentialsSheet(f.full_name, f.phone, r.member_no, r.pin);
           }
         } catch (err) { e.currentTarget.disabled = false; toast(errMsg(err), 4000); }
@@ -575,6 +584,451 @@
         try { const r = await callAdmin({ action: "reset_pin", profile_id: m.id }); close(); credentialsSheet(m.full_name, m.phone, r.member_no, r.pin); }
         catch (err) { toast(errMsg(err)); }
       });
+    });
+  }
+
+  // ===== pastor: saludos (tarjetas personalizadas en nombre del pastor) =====
+  const OCCASIONS = {
+    cumple: { icon: "🎂", name: "Cumpleaños", tpl: "fiesta" },
+    bautismo: { icon: "🕊️", name: "Aniversario de bautismo", tpl: "marfil" },
+    iglesia: { icon: "⛪", name: "Aniversario en la iglesia", tpl: "noche" },
+    bodas: { icon: "💍", name: "Aniversario de bodas", tpl: "olivo" },
+    especial: { icon: "⭐", name: "Fecha especial", tpl: "noche" },
+  };
+  // Reina-Valera 1960, versos cortos para que quepan en la tarjeta
+  const GREET_VERSES = {
+    cumple: [
+      ["Jehová te bendiga, y te guarde; Jehová haga resplandecer su rostro sobre ti.", "Números 6:24-25"],
+      ["Te dé conforme al deseo de tu corazón, y cumpla todo tu consejo.", "Salmos 20:4"],
+      ["Este es el día que hizo Jehová; nos gozaremos y alegraremos en él.", "Salmos 118:24"],
+      ["Enséñanos de tal modo a contar nuestros días, que traigamos al corazón sabiduría.", "Salmos 90:12"],
+      ["Tú coronas el año con tus bienes, y tus nubes destilan grosura.", "Salmos 65:11"],
+    ],
+    bautismo: [
+      ["De modo que si alguno está en Cristo, nueva criatura es; las cosas viejas pasaron; he aquí todas son hechas nuevas.", "2 Corintios 5:17"],
+      ["Así también nosotros andemos en vida nueva.", "Romanos 6:4"],
+      ["Con Cristo estoy juntamente crucificado, y ya no vivo yo, mas vive Cristo en mí.", "Gálatas 2:20"],
+    ],
+    iglesia: [
+      ["Doy gracias a mi Dios siempre que me acuerdo de vosotros.", "Filipenses 1:3"],
+      ["¡Mirad cuán bueno y cuán delicioso es habitar los hermanos juntos en armonía!", "Salmos 133:1"],
+      ["Estando persuadido de esto, que el que comenzó en vosotros la buena obra, la perfeccionará.", "Filipenses 1:6"],
+    ],
+    bodas: [
+      ["Y cordón de tres dobleces no se rompe pronto.", "Eclesiastés 4:12"],
+      ["Todo lo sufre, todo lo cree, todo lo espera, todo lo soporta.", "1 Corintios 13:7"],
+      ["Por tanto, lo que Dios juntó, no lo separe el hombre.", "Marcos 10:9"],
+    ],
+    especial: [
+      ["Grandes cosas ha hecho Jehová con nosotros; estaremos alegres.", "Salmos 126:3"],
+      ["Jehová te bendiga, y te guarde.", "Números 6:24"],
+      ["Encomienda a Jehová tu camino, y confía en él; y él hará.", "Salmos 37:5"],
+    ],
+  };
+  const addDays = (s, n) => { const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const dayDiff = (a, b) => Math.round((new Date(a + "T12:00:00Z") - new Date(b + "T12:00:00Z")) / 86400000);
+  function whenLabel(d) {
+    const n = dayDiff(d, today());
+    return n === 0 ? "hoy" : n === 1 ? "mañana" : n === -1 ? "ayer" : n > 0 ? `en ${n} días` : `hace ${-n} días`;
+  }
+  const yrs = (n) => `${n} ${n === 1 ? "año" : "años"}`;
+  function hashStr(s) {
+    let h = 2166136261;
+    for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Fechas de los próximos días (y de los últimos 3, por si quedó alguno sin enviar)
+  function occasionsFor(members, specials, from = -3, to = 14) {
+    const out = [];
+    const t = today();
+    for (let i = from; i <= to; i++) {
+      const d = addDays(t, i), md = d.slice(5), y = Number(d.slice(0, 4));
+      for (const m of members) {
+        if (!m.active || m.id === me.id) continue;
+        if (m.birthday && String(m.birthday).slice(5, 10) === md) out.push({ kind: "cumple", key: "cumple", date: d, m });
+        for (const [kind, f] of [["bautismo", "baptism_date"], ["iglesia", "member_since"], ["bodas", "wedding_date"]]) {
+          const v = m[f] && String(m[f]);
+          if (v && v.slice(5, 10) === md && y > Number(v.slice(0, 4))) out.push({ kind, key: kind, date: d, m, years: y - Number(v.slice(0, 4)) });
+        }
+      }
+      for (const sp of specials) {
+        const m = members.find((x) => x.id === sp.profile_id);
+        const v = String(sp.event_date);
+        if (!m || !m.active) continue;
+        if (sp.yearly ? v.slice(5, 10) === md && y >= Number(v.slice(0, 4)) : v === d) {
+          out.push({ kind: "especial", key: "especial:" + sp.id, date: d, m, label: sp.label, years: sp.yearly ? y - Number(v.slice(0, 4)) : 0 });
+        }
+      }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.m.full_name.localeCompare(b.m.full_name));
+  }
+
+  const greetSignature = () => church.greeting_signature || `${me.title || "Pastor"} ${me.full_name}`;
+  const churchShort = () => church.short_name || church.name || "La Línea";
+
+  function cardText(o, vi = 0) {
+    const n = o.years;
+    const T = {
+      cumple: [fmtDate(o.date, "dm"), "¡Feliz cumpleaños!", "Damos gracias a Dios por su vida"],
+      bautismo: ["Aniversario de bautismo", "Vida nueva", `${yrs(n)} de su bautismo`],
+      iglesia: ["Aniversario en la iglesia", "¡Gracias!", `${yrs(n)} siendo parte de nuestra familia`],
+      bodas: ["Aniversario de bodas", "¡Feliz aniversario!", `${yrs(n)} de matrimonio junto a su ${/^(Hna\.|Pastora)$/.test(o.m.title || "") ? "esposo" : "esposa"}`],
+      especial: [o.label || "Fecha especial", "¡Felicidades!", n > 0 ? `${yrs(n)} de este día especial` : "Celebramos con usted este día"],
+    }[o.kind];
+    const vs = GREET_VERSES[o.kind];
+    const v = vs[(hashStr(o.m.id + o.date) + vi) % vs.length];
+    return { kicker: T[0], headline: T[1], line: T[2], name: `${o.m.title ? o.m.title + " " : ""}${o.m.full_name}`,
+      verse: v[0], ref: v[1], date: o.date, signature: greetSignature(), from: `y toda la familia de ${churchShort()}`,
+      church: `Iglesia de Dios E.C. · ${churchShort()}`, seed: o.m.id + o.key + o.date };
+  }
+
+  function greetMessage(o) {
+    const first = o.m.full_name.split(" ")[0], sig = greetSignature(), igl = churchShort();
+    const n = o.years;
+    return {
+      cumple: `¡Feliz cumpleaños, ${first}! 🎂\n\nHoy damos gracias a Dios por su vida. Que el Señor le bendiga y le guarde en este nuevo año.\n\nCon cariño,\n${sig} y la familia de ${igl}`,
+      bautismo: `¡Bendiciones, ${first}! 🕊️\n\nHoy se cumplen ${yrs(n)} de su bautismo. Damos gracias a Dios por su fidelidad y por la vida nueva que tiene en Cristo.\n\nCon cariño,\n${sig}`,
+      iglesia: `${first}, hoy cumple ${yrs(n)} siendo parte de la familia de ${igl}. ⛪\n\nGracias por su fidelidad, su servicio y su cariño. Que Dios le siga bendiciendo.\n\nCon cariño,\n${sig}`,
+      bodas: `¡Feliz aniversario de bodas, ${first}! 💍\n\nHoy celebramos ${yrs(n)} de matrimonio. Que el Señor siga siendo el centro de su hogar.\n\nCon cariño,\n${sig} y la familia de ${igl}`,
+      especial: `¡Felicidades, ${first}! ⭐\n\nHoy celebramos con usted: ${o.label || "un día especial"}. Que Dios le bendiga grandemente.\n\nCon cariño,\n${sig}`,
+    }[o.kind];
+  }
+
+  // ----- dibujo de la tarjeta (1080 × 1350, formato ideal para WhatsApp) -----
+  const CW = 1080, CH = 1350;
+  const GOLD = "#C9A55C", GOLD_L = "#E8D3A0", GOLD_D = "#A8843A";
+  const SERIF = '"Cormorant Garamond", Georgia, serif', SCRIPT = '"Mr Dafoe", "Brush Script MT", cursive', SANS = "Archivo, Arial, sans-serif";
+  let cardAssets = null;
+  const loadImg = (src) => new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
+  async function cardReady() {
+    if (cardAssets) return cardAssets;
+    try {
+      await Promise.all([`600 80px ${SERIF}`, `italic 500 40px ${SERIF}`, `80px ${SCRIPT}`, `700 30px ${SANS}`, `800 30px ${SANS}`]
+        .map((f) => document.fonts.load(f)));
+    } catch (_) {}
+    const [logo, markW] = await Promise.all(["./img/logo.png", "./img/mark-w.png"].map(loadImg));
+    return (cardAssets = { logo, markW });
+  }
+
+  function wrapLines(ctx, text, maxW) {
+    const lines = [];
+    let cur = "";
+    for (const w of String(text).split(/\s+/)) {
+      const t = cur ? cur + " " + w : w;
+      if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = w; } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function fitFont(ctx, text, font, size, maxW, maxLines, minSize) {
+    for (let sz = size; sz > minSize; sz -= 4) {
+      ctx.font = font(sz);
+      const l = wrapLines(ctx, text, maxW);
+      if (l.length <= maxLines && l.every((x) => ctx.measureText(x).width <= maxW)) return { size: sz, lines: l };
+    }
+    ctx.font = font(minSize);
+    return { size: minSize, lines: wrapLines(ctx, text, maxW) };
+  }
+  // Texto con espaciado entre letras (no todos los navegadores tienen letterSpacing en canvas)
+  function spaced(ctx, text, x, y, sp, align = "center") {
+    const chars = [...text];
+    const w = chars.reduce((a, c) => a + ctx.measureText(c).width, 0) + sp * (chars.length - 1);
+    let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+    const prev = ctx.textAlign;
+    ctx.textAlign = "left";
+    for (const c of chars) { ctx.fillText(c, cx, y); cx += ctx.measureText(c).width + sp; }
+    ctx.textAlign = prev;
+  }
+  function diamond(ctx, x, y, r, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
+  }
+  const ruleCenter = (color) => (ctx, x, y) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - 170, y); ctx.lineTo(x - 22, y); ctx.moveTo(x + 22, y); ctx.lineTo(x + 170, y); ctx.stroke();
+    diamond(ctx, x, y, 8, color);
+  };
+  const ruleLeft = (color) => (ctx, x, y) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 170, y); ctx.stroke();
+    diamond(ctx, x + 190, y, 8, color);
+  };
+
+  // Acomoda el texto: primero mide, luego lo centra en el espacio disponible
+  function runFlow(ctx, c, o, dry, y0) {
+    const put = (t, x, y) => { if (!dry) ctx.fillText(t, x, y); };
+    let y = y0;
+    ctx.textAlign = o.align; ctx.textBaseline = "alphabetic";
+    ctx.font = `700 25px ${SANS}`; ctx.fillStyle = o.kicker;
+    y += 25; if (!dry) spaced(ctx, c.kicker.toUpperCase(), o.x, y, 7, o.align);
+    const h = fitFont(ctx, c.headline, (sz) => `${sz}px ${SCRIPT}`, o.headSize || 132, o.maxW, 1, 76);
+    ctx.font = `${h.size}px ${SCRIPT}`; ctx.fillStyle = o.head;
+    y += h.size; put(h.lines[0], o.x, y);
+    y += Math.round(h.size * 0.38) + 6; if (!dry && o.rule) o.rule(ctx, o.x, y); y += 22;
+    const nm = fitFont(ctx, c.name, (sz) => `600 ${sz}px ${SERIF}`, 88, o.maxW, 2, 54);
+    ctx.font = `600 ${nm.size}px ${SERIF}`; ctx.fillStyle = o.name;
+    for (const l of nm.lines) { y += nm.size; put(l, o.x, y); }
+    ctx.font = `italic 500 42px ${SERIF}`; ctx.fillStyle = o.line; y += 8;
+    for (const l of wrapLines(ctx, c.line, o.maxW)) { y += 50; put(l, o.x, y); }
+    y += 46;
+    const vx = o.verseX ?? o.x, vTop = y;
+    ctx.font = `italic 500 36px ${SERIF}`; ctx.fillStyle = o.verse;
+    for (const l of wrapLines(ctx, `«${c.verse}»`, o.verseW || o.maxW)) { y += 46; put(l, vx, y); }
+    y += 42; ctx.font = `700 19px ${SANS}`; ctx.fillStyle = o.ref;
+    if (!dry) spaced(ctx, c.ref.toUpperCase(), vx, y, 5, o.align);
+    if (!dry && o.bar) o.bar(ctx, vTop + 14, y + 6);
+    return y - y0 + 6;
+  }
+  function composeText(ctx, c, o) {
+    const h = runFlow(ctx, c, o, true, 0);
+    runFlow(ctx, c, o, false, o.top + Math.max(0, (o.bottom - o.top - h) / 2));
+  }
+  function drawSig(ctx, c, x, align, col, sub, y = CH - 190) {
+    ctx.textAlign = align; ctx.fillStyle = col;
+    const f = fitFont(ctx, c.signature, (sz) => `${sz}px ${SCRIPT}`, 76, 780, 1, 44);
+    ctx.font = `${f.size}px ${SCRIPT}`; ctx.fillText(c.signature, x, y);
+    ctx.font = `700 18px ${SANS}`; ctx.fillStyle = sub;
+    spaced(ctx, c.from.toUpperCase(), x, y + 50, 5, align);
+  }
+  function drawLogo(ctx, img, x, y, h, align = "center") {
+    const w = (img.width * h) / img.height;
+    ctx.drawImage(img, align === "center" ? x - w / 2 : x, y, w, h);
+  }
+  function archPath(ctx, x, y, w, h) {
+    const r = w / 2;
+    ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x, y + r);
+    ctx.arc(x + r, y + r, r, Math.PI, 0); ctx.lineTo(x + w, y + h); ctx.closePath();
+  }
+  // Rama de olivo: tallo curvo con hojas alternadas
+  function olive(ctx, R, p0, p1, p2, leaf, stem) {
+    ctx.strokeStyle = stem; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.quadraticCurveTo(p1[0], p1[1], p2[0], p2[1]); ctx.stroke();
+    let side = 1;
+    for (let t = 0.1; t < 0.97; t += 0.075) {
+      const u = 1 - t;
+      const x = u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], y = u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1];
+      const dx = 2 * u * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]), dy = 2 * u * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]);
+      const len = 78 - t * 34 + R() * 10;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx) + side * (0.7 + R() * 0.15));
+      ctx.beginPath(); ctx.ellipse(len / 2, 0, len / 2, len * 0.17, 0, 0, Math.PI * 2);
+      ctx.fillStyle = R() < 0.22 ? "rgba(201,165,92,.75)" : leaf; ctx.fill();
+      ctx.restore();
+      side = -side;
+    }
+  }
+
+  const TEMPLATES = {
+    noche: { name: "Noche", draw(ctx, c, a) {
+      const g = ctx.createRadialGradient(CW / 2, CH * 0.42, 80, CW / 2, CH / 2, CH * 0.78);
+      g.addColorStop(0, "#2A3866"); g.addColorStop(1, "#121831");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+      ctx.save(); ctx.globalAlpha = 0.05; ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.moveTo(CW * 0.58, 0); ctx.lineTo(CW * 0.7, 0); ctx.lineTo(CW * 0.2, CH); ctx.lineTo(CW * 0.08, CH); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.strokeRect(54, 54, CW - 108, CH - 108);
+      ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5; ctx.strokeRect(72, 72, CW - 144, CH - 144); ctx.globalAlpha = 1;
+      for (const [x, y] of [[54, 54], [CW - 54, 54], [54, CH - 54], [CW - 54, CH - 54]]) diamond(ctx, x, y, 13, GOLD);
+      drawLogo(ctx, a.markW, CW / 2, 118, 104);
+      ctx.font = `700 20px ${SANS}`; ctx.fillStyle = GOLD_L; spaced(ctx, c.church.toUpperCase(), CW / 2, 262, 6);
+      composeText(ctx, c, { x: CW / 2, align: "center", maxW: 860, verseW: 780, top: 300, bottom: 1085,
+        kicker: GOLD, head: "#fff", name: "#fff", line: "rgba(255,255,255,.82)", verse: GOLD_L, ref: GOLD, rule: ruleCenter(GOLD) });
+      drawSig(ctx, c, CW / 2, "center", "#fff", GOLD_L);
+    } },
+    marfil: { name: "Marfil", draw(ctx, c, a, R) {
+      ctx.fillStyle = "#F3EDE1"; ctx.fillRect(0, 0, CW, CH);
+      ctx.fillStyle = "rgba(120,96,50,.06)";
+      for (let i = 0; i < 1600; i++) ctx.fillRect(R() * CW, R() * CH, 1.8, 1.8);
+      const ax = 96, ay = 90, aw = CW - 192, ah = CH - 180;
+      ctx.save(); ctx.shadowColor = "rgba(30,39,71,.16)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 14;
+      archPath(ctx, ax, ay, aw, ah); ctx.fillStyle = "#FFFDF8"; ctx.fill(); ctx.restore();
+      ctx.save(); archPath(ctx, ax, ay, aw, ah); ctx.clip();
+      ctx.strokeStyle = "rgba(31,91,196,.07)"; ctx.lineWidth = 2;
+      const rays = 30 + Math.floor(R() * 8);
+      for (let k = 0; k <= rays; k++) {
+        const ang = Math.PI * (0.08 + (0.84 * k) / rays);
+        ctx.beginPath(); ctx.moveTo(CW / 2, ay - 60); ctx.lineTo(CW / 2 + Math.cos(ang) * 1800, ay - 60 + Math.sin(ang) * 1800); ctx.stroke();
+      }
+      ctx.restore();
+      archPath(ctx, ax, ay, aw, ah); ctx.strokeStyle = "#1F5BC4"; ctx.lineWidth = 3; ctx.stroke();
+      archPath(ctx, ax + 18, ay + 18, aw - 36, ah - 36); ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; ctx.stroke();
+      drawLogo(ctx, a.logo, CW / 2, 175, 92);
+      composeText(ctx, c, { x: CW / 2, align: "center", maxW: 720, verseW: 690, top: 300, bottom: 1060,
+        kicker: "#1F5BC4", head: "#1F5BC4", name: "#1E2747", line: "#5E6782", verse: "#3E5BA9", ref: GOLD_D, rule: ruleCenter(GOLD) });
+      drawSig(ctx, c, CW / 2, "center", "#1E2747", GOLD_D, CH - 210);
+    } },
+    fiesta: { name: "Fiesta", draw(ctx, c, a, R) {
+      const g = ctx.createLinearGradient(0, 0, CW, CH);
+      g.addColorStop(0, "#2468D6"); g.addColorStop(0.5, "#3E5BA9"); g.addColorStop(1, "#1E2747");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+      ctx.fillStyle = "rgba(255,255,255,.08)";
+      for (const [a0, a1] of [[0.48, 0.56], [0.74, 0.77]]) {
+        ctx.beginPath(); ctx.moveTo(CW * a0 + 300, 0); ctx.lineTo(CW * a1 + 300, 0); ctx.lineTo(CW * a1 - 500, CH); ctx.lineTo(CW * a0 - 500, CH); ctx.fill();
+      }
+      const cols = [GOLD, GOLD_L, "#fff", "#9DB7E8"];
+      for (let i = 0; i < 110; i++) {
+        const top = R() < 0.55;
+        const x = R() * CW, y = top ? R() * 300 : CH - R() * 100;
+        if (top && x > CW - 290 && y > 70 && y < 280) continue;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(R() * Math.PI); ctx.globalAlpha = 0.55 + R() * 0.45;
+        ctx.fillStyle = cols[Math.floor(R() * cols.length)];
+        const sz = 7 + R() * 14;
+        if (R() < 0.35) { ctx.beginPath(); ctx.arc(0, 0, sz / 2.4, 0, Math.PI * 2); ctx.fill(); } else ctx.fillRect(-sz / 2, -sz / 5, sz, sz / 2.5);
+        ctx.restore();
+      }
+      drawLogo(ctx, a.markW, 110, 96, 96, "left");
+      const [, mm, dd] = c.date.split("-").map(Number);
+      ctx.beginPath(); ctx.arc(CW - 170, 172, 84, 0, Math.PI * 2); ctx.fillStyle = GOLD; ctx.fill();
+      ctx.beginPath(); ctx.arc(CW - 170, 172, 72, 0, Math.PI * 2); ctx.strokeStyle = "rgba(30,39,71,.35)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = "#1E2747"; ctx.textAlign = "center"; ctx.font = `800 64px ${SANS}`; ctx.fillText(String(dd), CW - 170, 188);
+      ctx.font = `700 18px ${SANS}`; spaced(ctx, MONTHS_S[mm - 1].replace(".", "").toUpperCase(), CW - 170, 218, 4);
+      composeText(ctx, c, { x: CW / 2, align: "center", maxW: 880, verseW: 800, top: 300, bottom: 1080, headSize: 150,
+        kicker: GOLD_L, head: "#fff", name: "#fff", line: "rgba(255,255,255,.86)", verse: "#DCE6FA", ref: GOLD_L, rule: ruleCenter(GOLD_L) });
+      drawSig(ctx, c, CW / 2, "center", "#fff", GOLD_L);
+    } },
+    olivo: { name: "Olivo", draw(ctx, c, a, R) {
+      ctx.fillStyle = "#FBFAF6"; ctx.fillRect(0, 0, CW, CH);
+      ctx.strokeStyle = "rgba(30,39,71,.10)"; ctx.lineWidth = 2; ctx.strokeRect(40, 40, CW - 80, CH - 80);
+      olive(ctx, R, [CW + 30, 360], [CW - 110, 90], [CW - 440, 30], "rgba(126,145,112,.85)", "#7E9170");
+      olive(ctx, R, [CW + 30, CH - 400], [CW - 60, CH - 90], [CW - 360, CH + 20], "rgba(126,145,112,.7)", "#7E9170");
+      drawLogo(ctx, a.logo, 120, 100, 84, "left");
+      const X = 120;
+      composeText(ctx, c, { x: X, align: "left", maxW: 760, verseX: X + 34, verseW: 700, top: 260, bottom: 1080,
+        kicker: GOLD_D, head: "#1F5BC4", name: "#1E2747", line: "#5E6782", verse: "#3E5BA9", ref: GOLD_D, rule: ruleLeft(GOLD),
+        bar: (cx, y0, y1) => { cx.fillStyle = GOLD; cx.fillRect(X, y0 - 30, 4, y1 - y0 + 14); } });
+      drawSig(ctx, c, X, "left", "#1E2747", GOLD_D);
+    } },
+  };
+
+  function renderCard(canvas, tpl, c) {
+    canvas.width = CW; canvas.height = CH;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, CW, CH);
+    TEMPLATES[tpl].draw(ctx, c, cardAssets, rng(hashStr(c.seed)));
+  }
+
+  async function logGreeting(o, tpl, message) {
+    const { error } = await sb.from("kaleos_greetings").upsert({ church_id: me.church_id, profile_id: o.m.id, occasion: o.key,
+      occasion_date: o.date, template: tpl, message, sent_by: me.id, sent_at: new Date().toISOString() }, { onConflict: "profile_id,occasion,occasion_date" });
+    if (error) throw error;
+  }
+
+  async function greetSheet(o, after) {
+    try { await cardReady(); } catch (_) { return toast("No se pudo preparar la tarjeta. Revise la conexión."); }
+    let tpl = OCCASIONS[o.kind].tpl, vi = 0, file = null;
+    const first = o.m.full_name.split(" ")[0];
+    const fname = `saludo-${first.normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "hermano"}.png`;
+    sheet(`${OCCASIONS[o.kind].icon} ${o.m.full_name}`, `
+      <div class="small">${esc(o.label || OCCASIONS[o.kind].name)}${o.years ? " · " + yrs(o.years) : ""} · ${fmtDate(o.date, "dm")} (${whenLabel(o.date)})</div>
+      <canvas class="gcard" aria-label="Vista previa de la tarjeta"></canvas>
+      <div class="chips">${Object.entries(TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join("")}
+        <button class="chip" id="ov">↻ Otro versículo</button></div>
+      <div class="field"><label for="gm">Mensaje que acompaña la tarjeta</label><textarea id="gm" rows="7">${esc(greetMessage(o))}</textarea></div>
+      ${o.sent ? `<div class="result"><div class="dot">✓</div><div>Ya se envió<div class="small">${new Date(o.sent).toLocaleString("es-GT", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" })}</div></div></div>` : ""}
+      <button class="btn ok" id="gs">Enviar por WhatsApp</button>
+      <div class="small" style="text-align:center">Al tocar, elija WhatsApp y luego a <b>${esc(o.m.full_name)}</b>${o.m.phone ? " (" + esc(o.m.phone) + ")" : ""}.</div>
+      <div class="grid2"><button class="btn sec" id="gd">Descargar imagen</button><button class="btn sec" id="gk">Ya lo envié</button></div>`, (s, close) => {
+      const cv = $(".gcard", s);
+      const draw = () => {
+        file = null;
+        renderCard(cv, tpl, cardText(o, vi));
+        s.querySelectorAll("[data-tpl]").forEach((b) => b.classList.toggle("on", b.dataset.tpl === tpl));
+        cv.toBlob((b) => { if (b) file = new File([b], fname, { type: "image/png" }); }, "image/png");
+      };
+      const download = () => {
+        if (!file) return toast("Un momento, la tarjeta se está preparando…");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(file); a.download = file.name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      };
+      const done = async () => {
+        try { await logGreeting(o, tpl, $("#gm", s).value); toast("Saludo marcado como enviado"); close(); if (after) after(); }
+        catch (err) { toast(errMsg(err), 4000); }
+      };
+      s.querySelectorAll("[data-tpl]").forEach((b) => b.addEventListener("click", () => { tpl = b.dataset.tpl; draw(); }));
+      $("#ov", s).addEventListener("click", () => { vi++; draw(); });
+      $("#gd", s).addEventListener("click", download);
+      $("#gk", s).addEventListener("click", done);
+      $("#gs", s).addEventListener("click", async () => {
+        if (!file) return toast("Un momento, la tarjeta se está preparando…");
+        const text = $("#gm", s).value;
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], text }); await done(); }
+          catch (err) { if (err.name !== "AbortError") toast(errMsg(err), 4000); }
+          return;
+        }
+        // Computadora: se descarga la imagen y se abre el chat con el mensaje escrito
+        download();
+        if (o.m.phone) window.open(waLink(o.m.phone, text), "_blank", "noopener");
+        toast("La imagen se descargó. Adjúntela en el chat y luego toque «Ya lo envié».", 6000);
+      });
+      draw();
+    });
+  }
+
+  function specialSheet(members, after) {
+    const opts = members.filter((m) => m.active).sort((a, b) => a.full_name.localeCompare(b.full_name))
+      .map((m) => `<option value="${m.id}">${esc(m.full_name)}</option>`).join("");
+    sheet("Fecha especial", `<div class="field"><label for="sm">Hermano</label><select id="sm">${opts}</select></div>
+      <div class="field"><label for="sl">¿Qué celebramos?</label><input id="sl" list="sll" placeholder="Graduación, nacimiento de su bebé…">
+        <datalist id="sll"><option value="Graduación"><option value="Nacimiento de su bebé"><option value="Quince años de su hija">
+        <option value="Recuperación de su salud"><option value="Nuevo trabajo"><option value="Aniversario de su ministerio"></datalist></div>
+      <div class="field"><label for="sd">Fecha</label><input id="sd" type="date" value="${today()}"></div>
+      <label class="row" style="justify-content:flex-start;gap:8px"><input type="checkbox" id="sy"> Se repite cada año</label>
+      <button class="btn" id="ss">Guardar</button>`, (s, close) => {
+      $("#ss", s).addEventListener("click", async () => {
+        const label = $("#sl", s).value.trim(), date = $("#sd", s).value;
+        if (!label || !date) return toast("Escriba qué celebramos y la fecha");
+        const { error } = await sb.from("kaleos_special_dates").insert({ church_id: me.church_id, profile_id: $("#sm", s).value,
+          label, event_date: date, yearly: $("#sy", s).checked, created_by: me.id });
+        if (error) return toast(errMsg(error), 4000);
+        toast("Fecha guardada"); close(); if (after) after();
+      });
+    });
+  }
+
+  async function viewGreetings(el) {
+    const [{ data: members, error }, sp, gr] = await Promise.all([
+      sb.from("kaleos_profiles").select("*").eq("church_id", me.church_id),
+      sb.from("kaleos_special_dates").select("*").eq("church_id", me.church_id),
+      sb.from("kaleos_greetings").select("profile_id, occasion, occasion_date, sent_at").eq("church_id", me.church_id).gte("occasion_date", addDays(today(), -7)),
+    ]);
+    if (error) throw error;
+    const ready = !sp.error && !gr.error;
+    const sent = new Map((gr.data || []).map((g) => [`${g.profile_id}|${g.occasion}|${g.occasion_date}`, g.sent_at]));
+    const list = occasionsFor(members || [], sp.data || []).map((o) => ({ ...o, sent: sent.get(`${o.m.id}|${o.key}|${o.date}`) }));
+    const pending = list.filter((o) => !o.sent).length;
+    el.innerHTML = `<h2 class="t">Saludos del pastor</h2>
+      <div class="small">Tarjetas para cumpleaños, aniversarios y fechas especiales. Usted revisa cada una antes de enviarla.</div>
+      ${ready ? "" : `<div class="tile"><b>Falta activar Saludos en la base de datos.</b><span class="muted">Puede preparar tarjetas, pero aún no se guardan las fechas especiales ni cuáles ya se enviaron.</span></div>`}
+      <div class="tile"><div class="lab c">Próximos 14 días${pending ? ` · ${pending} por enviar` : ""}</div>
+        ${list.length ? list.map((o, i) => `<div class="row"><span class="grow">${OCCASIONS[o.kind].icon} <b>${esc(o.m.full_name)}</b>
+          <span class="small" style="display:block">${esc(o.label || OCCASIONS[o.kind].name)}${o.years ? " · " + yrs(o.years) : ""} · ${fmtDate(o.date, "dm")} (${whenLabel(o.date)})</span></span>
+          <button class="pill ${o.sent ? "g" : "solid"}" data-i="${i}">${o.sent ? "Enviado ✓" : "Preparar"}</button></div>`).join("")
+          : `<div class="empty">No hay fechas en los próximos 14 días.</div>`}
+      </div>
+      <button class="btn sec" id="addsp">＋ Agregar fecha especial</button>
+      <div class="tile"><div class="lab r">Firma de las tarjetas</div>
+        <div class="field"><label for="sig">Así aparece al pie de cada tarjeta</label><input id="sig" value="${esc(greetSignature())}"></div>
+        <button class="btn sm" id="ssig">Guardar firma</button></div>
+      <div class="small">Consejo: agregue el aniversario de bodas en la ficha de cada hermano (Hermanos › Editar).</div>`;
+    el.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => greetSheet(list[b.dataset.i], () => go("saludos"))));
+    $("#addsp", el).addEventListener("click", () => specialSheet(members || [], () => go("saludos")));
+    $("#ssig", el).addEventListener("click", async () => {
+      const v = $("#sig", el).value.trim() || null;
+      const { data, error: e } = await sb.from("kaleos_churches").update({ greeting_signature: v }).eq("id", me.church_id).select().single();
+      if (e) return toast(errMsg(e), 4000);
+      church = data; toast("Firma guardada");
     });
   }
 
