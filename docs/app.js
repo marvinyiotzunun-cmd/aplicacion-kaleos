@@ -183,19 +183,21 @@
   // ===== estructura con pestañas =====
   function tabsFor(role) {
     if (role === "pastor") return [["panel", "🏠", "Panel"], ["hermanos", "👥", "Hermanos"], ["saludos", "💌", "Saludos"], ["escanear", "📷", "Escanear"], ["reporte", "📊", "Reporte"], ["iglesia", "⛪", "Iglesia"]];
-    const t = [["tarjeta", "🪪", "Tarjeta"], ["camino", "🛤️", "Camino"]];
+    const t = [["tarjeta", "🪪", "Tarjeta"], ["mensajes", "📬", "Mensajes"], ["camino", "🛤️", "Camino"]];
     if (role === "usher") t.push(["escanear", "📷", "Escanear"]);
     t.push(["iglesia", "⛪", "Iglesia"]);
     return t;
   }
 
   function renderShell(start) {
-    const tabs = tabsFor(me.role);
+    const role = me.role;
+    const tabs = tabsFor(role);
     app.innerHTML = `<main class="page" id="page"></main>
       <nav class="tabs" aria-label="Secciones"><div class="in">${tabs.map(([k, i, l]) =>
         `<button class="tab" data-tab="${k}"><i aria-hidden="true">${i}</i>${l}</button>`).join("")}</div></nav>`;
     app.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => go(b.dataset.tab)));
     go(start);
+    if (role !== "pastor") refreshInboxBadge();
   }
 
   function header() {
@@ -216,7 +218,7 @@
     });
     window.scrollTo(0, 0);
     const views = { tarjeta: viewCard, camino: viewPath, iglesia: me.role === "pastor" ? viewChurchAdmin : viewChurch,
-      escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport, saludos: viewGreetings };
+      escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport, saludos: viewGreetings, mensajes: viewInbox };
     Promise.resolve(views[name]($("#body"))).catch((e) => { $("#body").innerHTML = `<p class="muted">${esc(errMsg(e))}</p>`; });
   }
 
@@ -228,7 +230,8 @@
     const { data: streak } = await sb.rpc("kaleos_my_streak");
     const v = VERSES[new Date().getFullYear() % VERSES.length];
     const first = me.full_name.split(" ")[0];
-    el.innerHTML = `
+    const unread = await unreadMessages();
+    el.innerHTML = `${unread.length ? `<button class="big-btn news" id="news"><i>📬</i>${unread.length === 1 ? "Tiene un mensaje nuevo del pastor" : `Tiene ${unread.length} mensajes nuevos del pastor`}</button>` : ""}
       ${bday ? `<div class="small">Hoy, ${fmtDate(today(), "dm")}</div>
       <div class="card bday"><div class="head"><img src="./img/logo.png" alt=""><span class="badge">HOY</span></div>
         <div class="greet">¡Feliz cumpleaños, ${esc(first)}!</div>
@@ -252,6 +255,7 @@
       </div>
       ${streak > 0 ? `<div class="streak"><div class="dot">★</div><div>${streak} ${streak === 1 ? "domingo" : "domingos seguidos"}<div class="small">¡Gracias por congregarse!</div></div></div>` : ""}`;
     if (bday) { confetti(); $("#pray").addEventListener("click", askPrayer); }
+    if (unread.length) $("#news").addEventListener("click", () => go("mensajes"));
   }
 
   function confetti() {
@@ -285,6 +289,65 @@
         toast("Detalle enviado"); close();
       });
     });
+  }
+
+  // ===== hermano: mensajes del pastor =====
+  async function inboxData() {
+    const [{ data: msgs, error }, { data: reads }] = await Promise.all([
+      sb.from("kaleos_messages").select("*").eq("church_id", me.church_id).order("created_at", { ascending: false }).limit(40),
+      sb.from("kaleos_message_reads").select("message_id").eq("profile_id", me.id),
+    ]);
+    if (error) return { msgs: [], read: new Set() };
+    return { msgs: (msgs || []).filter((x) => !x.profile_id || x.profile_id === me.id), read: new Set((reads || []).map((r) => r.message_id)) };
+  }
+  async function unreadMessages() {
+    if (me.role === "pastor") return [];
+    const { msgs, read } = await inboxData();
+    return msgs.filter((x) => !read.has(x.id));
+  }
+  async function refreshInboxBadge() {
+    const n = (await unreadMessages()).length;
+    const b = app.querySelector('.tab[data-tab="mensajes"]');
+    if (!b) return;
+    let d = b.querySelector(".count");
+    if (!n) { if (d) d.remove(); return; }
+    if (!d) { d = document.createElement("b"); d.className = "count"; b.appendChild(d); }
+    d.textContent = n;
+  }
+
+  async function viewInbox(el) {
+    const { msgs, read } = await inboxData();
+    const kindOf = (k) => KINDS[k] || KINDS.aviso;
+    el.innerHTML = `<h2 class="t">Mensajes del pastor</h2>
+      <div class="list">${msgs.length ? msgs.map((x, i) => `<button class="item${read.has(x.id) ? "" : " unread"}" data-i="${i}">
+        <div class="avatar sm">${kindOf(x.kind).icon}</div>
+        <div class="grow"><b>${esc(x.title)}</b><span>${esc(kindOf(x.kind).name)} · ${new Date(x.created_at).toLocaleDateString("es-GT", { timeZone: TZ, day: "numeric", month: "long" })}</span></div>
+        ${read.has(x.id) ? "›" : '<span class="new">NUEVO</span>'}</button>`).join("") : '<div class="empty">Aún no tiene mensajes. Aquí le llegarán las felicitaciones, invitaciones y recordatorios de su pastor.</div>'}</div>`;
+    el.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => openMessage(msgs[b.dataset.i], () => go("mensajes"))));
+  }
+
+  async function openMessage(x, after) {
+    if (x.card) { try { await cardReady(); } catch (_) {} }
+    sheet(x.title, `${x.card && cardAssets ? '<canvas class="gcard" aria-label="Tarjeta"></canvas>' : ""}
+      <div class="notice" style="background:var(--white);border-color:var(--line);font-size:17px">${esc(x.body || "")}</div>
+      ${x.event_at ? `<div class="small">🗓️ ${esc(fmtWhen(x.event_at))}</div>` : ""}
+      <div class="grid2">${x.card && cardAssets ? '<button class="btn sec" id="sv">Guardar imagen</button>' : ""}<button class="btn sec" id="ls">▶ Escuchar</button></div>
+      <button class="btn" data-close>Listo</button>`, (s) => {
+      const cv = $(".gcard", s);
+      if (cv) {
+        renderCard(cv, x.card.tpl, x.card.c);
+        $("#sv", s).addEventListener("click", () => cv.toBlob((b) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(b); a.download = "tarjeta-kaleos.png";
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        }, "image/png"));
+      }
+      $("#ls", s).addEventListener("click", () => speak(`${x.title}. ${x.body || ""}`));
+    });
+    await sb.from("kaleos_message_reads").upsert({ message_id: x.id, profile_id: me.id }, { onConflict: "message_id,profile_id", ignoreDuplicates: true });
+    refreshInboxBadge();
+    if (after && tab === "mensajes") after();
   }
 
   // ===== hermano: camino =====
@@ -514,13 +577,14 @@
       <div class="grid2">
         <div class="field"><label for="fsince">Miembro desde</label><input id="fsince" type="date" value="${esc(m.member_since || "")}"></div>
         <div class="field"><label for="fbap">Bautismo</label><input id="fbap" type="date" value="${esc(m.baptism_date || "")}"></div></div>
+      <div class="field"><label for="femail">Correo (opcional, para enviarle mensajes)</label><input id="femail" type="email" inputmode="email" value="${esc(m.email || "")}"></div>
       <div class="field"><label for="fwed">Aniversario de bodas (si es casado)</label><input id="fwed" type="date" value="${esc(m.wedding_date || "")}"></div>
       <div class="field"><label for="fserves">Sirve en</label><input id="fserves" value="${esc(m.serves_in || "")}" placeholder="Damas Dorcas, alabanza, ujieres…"></div>`;
   }
   function readFields(s) {
     const v = (id) => { const x = $("#" + id, s).value.trim(); return x === "" ? null : x; };
     return { title: v("ftitle"), full_name: v("fname"), stage: v("fstage"), role: v("frole"), phone: v("fphone"),
-      birthday: v("fbday"), member_since: v("fsince"), baptism_date: v("fbap"), wedding_date: v("fwed"), serves_in: v("fserves") };
+      birthday: v("fbday"), member_since: v("fsince"), baptism_date: v("fbap"), wedding_date: v("fwed"), email: v("femail"), serves_in: v("fserves") };
   }
 
   function memberForm(m) {
@@ -542,7 +606,7 @@
             go("hermanos");
           } else {
             const r = await callAdmin({ action: "create_member", ...f });
-            if (f.wedding_date && r.id) await sb.from("kaleos_profiles").update({ wedding_date: f.wedding_date }).eq("id", r.id);
+            if ((f.wedding_date || f.email) && r.id) await sb.from("kaleos_profiles").update({ wedding_date: f.wedding_date, email: f.email }).eq("id", r.id);
             close(); go("hermanos"); credentialsSheet(f.full_name, f.phone, r.member_no, r.pin);
           }
         } catch (err) { e.currentTarget.disabled = false; toast(errMsg(err), 4000); }
@@ -922,27 +986,37 @@
     if (error) throw error;
   }
 
-  async function greetSheet(o, after) {
+  // Hoja de envío común: vista previa de la tarjeta, mensaje y los tres canales (WhatsApp, correo, Kaleos)
+  async function sendSheet(opt) {
     try { await cardReady(); } catch (_) { return toast("No se pudo preparar la tarjeta. Revise la conexión."); }
-    let tpl = OCCASIONS[o.kind].tpl, vi = 0, file = null;
-    const first = o.m.full_name.split(" ")[0];
-    const fname = `saludo-${first.normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "hermano"}.png`;
-    sheet(`${OCCASIONS[o.kind].icon} ${o.m.full_name}`, `
-      <div class="small">${esc(o.label || OCCASIONS[o.kind].name)}${o.years ? " · " + yrs(o.years) : ""} · ${fmtDate(o.date, "dm")} (${whenLabel(o.date)})</div>
+    let tpl = opt.tpl, vi = 0, file = null, savedInKaleos = false, msgEdited = false;
+    const to0 = opt.to || null;
+    const slug = (to0 ? to0.full_name.split(" ")[0] : opt.fileName || "kaleos").normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "kaleos";
+    const fname = `tarjeta-${slug}.png`;
+    sheet(opt.title, `${opt.sub || ""}${opt.extraHtml || ""}
       <canvas class="gcard" aria-label="Vista previa de la tarjeta"></canvas>
       <div class="chips">${Object.entries(TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join("")}
         <button class="chip" id="ov">↻ Otro versículo</button></div>
-      <div class="field"><label for="gm">Mensaje que acompaña la tarjeta</label><textarea id="gm" rows="7">${esc(greetMessage(o))}</textarea></div>
-      ${o.sent ? `<div class="result"><div class="dot">✓</div><div>Ya se envió<div class="small">${new Date(o.sent).toLocaleString("es-GT", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" })}</div></div></div>` : ""}
-      <button class="btn ok" id="gs">Enviar por WhatsApp</button>
-      <div class="small" style="text-align:center">Al tocar, elija WhatsApp y luego a <b>${esc(o.m.full_name)}</b>${o.m.phone ? " (" + esc(o.m.phone) + ")" : ""}.</div>
-      <div class="grid2"><button class="btn sec" id="gd">Descargar imagen</button><button class="btn sec" id="gk">Ya lo envié</button></div>`, (s, close) => {
-      const cv = $(".gcard", s);
+      <div class="field"><label for="gm">Mensaje que acompaña la tarjeta</label><textarea id="gm" rows="7"></textarea></div>
+      ${opt.sent ? `<div class="result"><div class="dot">✓</div><div>Ya se envió<div class="small">${new Date(opt.sent).toLocaleString("es-GT", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" })}</div></div></div>` : ""}
+      <div class="lab r" style="margin-top:4px">Enviar por</div>
+      <div class="channels">
+        <button class="chan" id="cw"><i>💬</i>WhatsApp</button>
+        <button class="chan" id="ce"><i>✉️</i>Correo</button>
+        <button class="chan" id="ck"><i>📬</i>Kaleos</button>
+      </div>
+      <div class="small" style="text-align:center">${opt.target
+        ? "WhatsApp: elija a la persona o el grupo de la iglesia. Correo y Kaleos: van a quien eligió en «Para»."
+        : `WhatsApp: elija a <b>${esc(to0.full_name)}</b>${to0.phone ? " (" + esc(to0.phone) + ")" : ""}. Kaleos: le llega a su app.`}</div>
+      <div class="grid2"><button class="btn sec" id="gd">Descargar imagen</button>${opt.log ? `<button class="btn sec" id="gk">Ya lo envié</button>` : ""}</div>`, (s, close) => {
+      const cv = $(".gcard", s), gm = $("#gm", s);
+      const target = () => (opt.target ? opt.target(s) : to0);
       const draw = () => {
-        file = null;
-        renderCard(cv, tpl, cardText(o, vi));
+        file = null; savedInKaleos = false;
+        renderCard(cv, tpl, opt.card(vi, s));
         s.querySelectorAll("[data-tpl]").forEach((b) => b.classList.toggle("on", b.dataset.tpl === tpl));
         cv.toBlob((b) => { if (b) file = new File([b], fname, { type: "image/png" }); }, "image/png");
+        if (!msgEdited) gm.value = opt.message(s);
       };
       const download = () => {
         if (!file) return toast("Un momento, la tarjeta se está preparando…");
@@ -951,28 +1025,129 @@
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       };
-      const done = async () => {
-        try { await logGreeting(o, tpl, $("#gm", s).value); toast("Saludo marcado como enviado"); close(); if (after) after(); }
-        catch (err) { toast(errMsg(err), 4000); }
+      const finish = async (msg) => {
+        if (opt.log) { try { await opt.log(tpl, gm.value); } catch (err) { return toast(errMsg(err), 4000); } }
+        toast(msg); close(); if (opt.after) opt.after();
       };
+      const saveInKaleos = async () => {
+        if (savedInKaleos) return;
+        const to = target();
+        const { error } = await sb.from("kaleos_messages").insert({ church_id: me.church_id, profile_id: to ? to.id : null,
+          kind: opt.kind(s), title: opt.msgTitle(s), body: gm.value, card: { tpl, c: opt.card(vi, s) },
+          event_at: opt.eventAt ? opt.eventAt(s) : null, created_by: me.id });
+        if (error) throw error;
+        savedInKaleos = true;
+      };
+      gm.addEventListener("input", () => { msgEdited = true; });
       s.querySelectorAll("[data-tpl]").forEach((b) => b.addEventListener("click", () => { tpl = b.dataset.tpl; draw(); }));
       $("#ov", s).addEventListener("click", () => { vi++; draw(); });
       $("#gd", s).addEventListener("click", download);
-      $("#gk", s).addEventListener("click", done);
-      $("#gs", s).addEventListener("click", async () => {
+      if (opt.log) $("#gk", s).addEventListener("click", () => finish("Marcado como enviado"));
+      if (opt.bind) opt.bind(s, draw);
+      $("#ck", s).addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        const to = target();
+        try { await saveInKaleos(); await finish(to ? `Enviado a la app de ${to.full_name.split(" ")[0]}` : "Enviado a la app de toda la iglesia"); }
+        catch (err) { e.currentTarget.disabled = false; toast(errMsg(err), 4000); }
+      });
+      $("#ce", s).addEventListener("click", async () => {
+        const to = target();
+        const emails = to ? [to.email].filter(Boolean) : (opt.recipients || []).map((m) => m.email).filter(Boolean);
+        if (!emails.length) return toast(to ? "Este hermano no tiene correo. Agréguelo en Hermanos › Editar." : "Ningún hermano tiene correo registrado todavía.", 4500);
+        try { await saveInKaleos(); } catch (err) { return toast(errMsg(err), 4000); }
+        const body = `${gm.value}\n\nVea la tarjeta en Kaleos: ${location.origin + location.pathname}`;
+        const subject = opt.msgTitle(s) + " · " + churchShort();
+        const q = `${to ? "" : "bcc=" + encodeURIComponent(emails.join(",")) + "&"}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        location.href = `mailto:${to ? encodeURIComponent(emails[0]) : ""}?${q}`;
+        setTimeout(() => finish("Correo listo. La tarjeta también quedó en Kaleos."), 600);
+      });
+      $("#cw", s).addEventListener("click", async () => {
         if (!file) return toast("Un momento, la tarjeta se está preparando…");
-        const text = $("#gm", s).value;
+        const text = gm.value, to = target();
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try { await navigator.share({ files: [file], text }); await done(); }
+          try { await navigator.share({ files: [file], text }); await finish("Enviado por WhatsApp"); }
           catch (err) { if (err.name !== "AbortError") toast(errMsg(err), 4000); }
           return;
         }
         // Computadora: se descarga la imagen y se abre el chat con el mensaje escrito
         download();
-        if (o.m.phone) window.open(waLink(o.m.phone, text), "_blank", "noopener");
-        toast("La imagen se descargó. Adjúntela en el chat y luego toque «Ya lo envié».", 6000);
+        window.open(to && to.phone ? waLink(to.phone, text) : `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+        toast(opt.log ? "La imagen se descargó. Adjúntela en el chat y luego toque «Ya lo envié»." : "La imagen se descargó. Adjúntela en el chat.", 6000);
       });
       draw();
+    });
+  }
+
+  function greetSheet(o, after) {
+    return sendSheet({
+      title: `${OCCASIONS[o.kind].icon} ${o.m.full_name}`,
+      sub: `<div class="small">${esc(o.label || OCCASIONS[o.kind].name)}${o.years ? " · " + yrs(o.years) : ""} · ${fmtDate(o.date, "dm")} (${whenLabel(o.date)})</div>`,
+      tpl: OCCASIONS[o.kind].tpl, to: o.m, sent: o.sent, after,
+      card: (vi) => cardText(o, vi), message: () => greetMessage(o),
+      kind: () => "felicitacion", msgTitle: () => o.label || OCCASIONS[o.kind].name,
+      log: (tpl, text) => logGreeting(o, tpl, text),
+    });
+  }
+
+  // Invitaciones, recordatorios, avisos y felicitaciones libres (a un hermano o a toda la iglesia)
+  const KINDS = {
+    invitacion: { name: "Invitación", icon: "📣", head: "¡Le invitamos!", tpl: "noche" },
+    recordatorio: { name: "Recordatorio", icon: "⏰", head: "No lo olvide", tpl: "marfil" },
+    felicitacion: { name: "Felicitación", icon: "🎉", head: "¡Felicidades!", tpl: "fiesta" },
+    aviso: { name: "Aviso", icon: "📢", head: "Aviso importante", tpl: "olivo" },
+  };
+  function fmtWhen(v) {
+    if (!v) return "";
+    const d = new Date(v);
+    return d.toLocaleString("es-GT", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
+  }
+  function composeSheet(members) {
+    const active = members.filter((m) => m.active).sort((a, b) => a.full_name.localeCompare(b.full_name));
+    const val = (s, id) => $("#" + id, s).value.trim();
+    const target = (s) => active.find((m) => m.id === $("#mto", s).value) || null;
+    let headEdited = false;
+    const card = (vi, s) => {
+      const k = val(s, "mkind"), when = val(s, "mwhen"), where = val(s, "mwhere");
+      const vs = GREET_VERSES.especial;
+      const v = vs[(hashStr(val(s, "mwhat")) + vi) % vs.length];
+      return { kicker: KINDS[k].name, headline: val(s, "mhead") || KINDS[k].head, name: val(s, "mwhat") || "Escriba aquí el motivo",
+        line: [fmtWhen(when), where].filter(Boolean).join(" · ") || churchShort(), verse: v[0], ref: v[1],
+        date: when ? when.slice(0, 10) : today(), signature: greetSignature(), from: `y toda la familia de ${churchShort()}`,
+        church: `Iglesia de Dios E.C. · ${churchShort()}`, seed: k + val(s, "mwhat") };
+    };
+    const message = (s) => {
+      const k = val(s, "mkind"), to = target(s), when = val(s, "mwhen"), where = val(s, "mwhere");
+      return `${to ? `Hola, ${to.full_name.split(" ")[0]}. ` : "Querida familia de " + churchShort() + ": "}${KINDS[k].icon} ${val(s, "mhead") || KINDS[k].head}\n\n` +
+        `${val(s, "mwhat") || ""}\n${when ? "🗓️ " + fmtWhen(when) + "\n" : ""}${where ? "📍 " + where + "\n" : ""}\nCon cariño,\n${greetSignature()}`;
+    };
+    return sendSheet({
+      title: "✉️ Nuevo mensaje",
+      extraHtml: `<div class="grid2">
+          <div class="field"><label for="mkind">Tipo</label><select id="mkind">${Object.entries(KINDS).map(([k, x]) => `<option value="${k}">${x.icon} ${x.name}</option>`).join("")}</select></div>
+          <div class="field"><label for="mto">Para</label><select id="mto"><option value="">Toda la iglesia</option>${active.map((m) => `<option value="${m.id}">${esc(m.full_name)}</option>`).join("")}</select></div></div>
+        <div class="field"><label for="mwhat">¿Qué? (aparece grande en la tarjeta)</label><input id="mwhat" placeholder="Vigilia de oración, culto de jóvenes, Santa Cena…"></div>
+        <div class="grid2"><div class="field"><label for="mwhen">¿Cuándo? (opcional)</label><input id="mwhen" type="datetime-local"></div>
+          <div class="field"><label for="mwhere">¿Dónde? (opcional)</label><input id="mwhere" placeholder="Templo La Línea"></div></div>
+        <div class="field"><label for="mhead">Frase de la tarjeta</label><input id="mhead" value="${esc(KINDS.invitacion.head)}"></div>`,
+      tpl: KINDS.invitacion.tpl, fileName: "mensaje", recipients: active,
+      target,
+      card, message,
+      kind: (s) => val(s, "mkind"), msgTitle: (s) => val(s, "mwhat") || KINDS[val(s, "mkind")].name,
+      eventAt: (s) => (val(s, "mwhen") ? new Date(val(s, "mwhen")).toISOString() : null),
+      after: () => go("saludos"),
+      bind: (s, draw) => {
+        $("#mkind", s).addEventListener("change", () => {
+          if (!headEdited) $("#mhead", s).value = KINDS[val(s, "mkind")].head;
+          s.querySelectorAll("[data-tpl]").forEach((b) => { if (b.dataset.tpl === KINDS[val(s, "mkind")].tpl) b.click(); });
+          draw();
+        });
+        $("#mhead", s).addEventListener("input", () => { headEdited = true; });
+        let t = 0;
+        for (const id of ["mto", "mwhat", "mwhen", "mwhere", "mhead"]) {
+          $("#" + id, s).addEventListener("input", () => { clearTimeout(t); t = setTimeout(draw, 250); });
+          $("#" + id, s).addEventListener("change", draw);
+        }
+      },
     });
   }
 
@@ -1009,7 +1184,8 @@
     const list = occasionsFor(members || [], sp.data || []).map((o) => ({ ...o, sent: sent.get(`${o.m.id}|${o.key}|${o.date}`) }));
     const pending = list.filter((o) => !o.sent).length;
     el.innerHTML = `<h2 class="t">Saludos del pastor</h2>
-      <div class="small">Tarjetas para cumpleaños, aniversarios y fechas especiales. Usted revisa cada una antes de enviarla.</div>
+      <div class="small">Tarjetas para cumpleaños, aniversarios, invitaciones y recordatorios. Usted revisa cada una y la envía por WhatsApp, correo o a la app de los hermanos.</div>
+      <button class="btn" id="newmsg">✉️ Nuevo mensaje: invitación, recordatorio o aviso</button>
       ${ready ? "" : `<div class="tile"><b>Falta activar Saludos en la base de datos.</b><span class="muted">Puede preparar tarjetas, pero aún no se guardan las fechas especiales ni cuáles ya se enviaron.</span></div>`}
       <div class="tile"><div class="lab c">Próximos 14 días${pending ? ` · ${pending} por enviar` : ""}</div>
         ${list.length ? list.map((o, i) => `<div class="row"><span class="grow">${OCCASIONS[o.kind].icon} <b>${esc(o.m.full_name)}</b>
@@ -1023,6 +1199,7 @@
         <button class="btn sm" id="ssig">Guardar firma</button></div>
       <div class="small">Consejo: agregue el aniversario de bodas en la ficha de cada hermano (Hermanos › Editar).</div>`;
     el.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => greetSheet(list[b.dataset.i], () => go("saludos"))));
+    $("#newmsg", el).addEventListener("click", () => composeSheet(members || []));
     $("#addsp", el).addEventListener("click", () => specialSheet(members || [], () => go("saludos")));
     $("#ssig", el).addEventListener("click", async () => {
       const v = $("#sig", el).value.trim() || null;
