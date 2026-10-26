@@ -41,6 +41,7 @@ create policy kaleos_message_reads_own on public.kaleos_message_reads for all to
 
 -- Cada hermano elige cómo recibir los mensajes del pastor y mantiene al día sus datos de contacto
 alter table public.kaleos_profiles add column if not exists preferred_channel text not null default 'whatsapp';
+alter table public.kaleos_profiles add column if not exists contact_updated_at timestamptz;
 alter table public.kaleos_profiles drop constraint if exists kaleos_profiles_preferred_channel_check;
 alter table public.kaleos_profiles add constraint kaleos_profiles_preferred_channel_check
   check (preferred_channel in ('whatsapp','correo','app'));
@@ -51,7 +52,8 @@ begin
   if p_channel not in ('whatsapp','correo','app') then raise exception 'Medio no válido'; end if;
   update public.kaleos_profiles
      set phone = nullif(trim(p_phone), ''), email = nullif(trim(p_email), ''),
-         birthday = p_birthday, wedding_date = p_wedding, preferred_channel = p_channel
+         birthday = p_birthday, wedding_date = p_wedding, preferred_channel = p_channel,
+         contact_updated_at = now()
    where id = auth.uid() and active;
 end $$;
 

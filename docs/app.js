@@ -124,6 +124,8 @@
     const { data: c } = await sb.from("kaleos_churches").select("*").eq("id", p.church_id).single();
     church = c || {};
     renderShell(me.role === "pastor" ? "panel" : "tarjeta");
+    // Primera vez que el hermano entra: le pedimos sus datos de contacto
+    if (me.role !== "pastor" && "contact_updated_at" in me && !me.contact_updated_at) setTimeout(() => myDataSheet(true), 600);
   }
 
   // ===== inicio de sesión =====
@@ -294,9 +296,11 @@
   }
 
   // Cada hermano mantiene al día sus datos de contacto y elige cómo recibir los mensajes del pastor
-  function myDataSheet() {
+  function myDataSheet(welcome) {
     let ch = me.preferred_channel || "whatsapp";
-    sheet("Mis datos", `<p class="muted" style="margin:0">Con estos datos su pastor le felicita y le avisa de las actividades.</p>
+    sheet(welcome === true ? "¡Bienvenido a Kaleos!" : "Mis datos", `<p class="muted" style="margin:0">${welcome === true
+      ? "Antes de empezar, revise sus datos. Con ellos su pastor le felicita y le avisa de las actividades."
+      : "Con estos datos su pastor le felicita y le avisa de las actividades."}</p>
       <div class="field"><label for="dphone">Teléfono (WhatsApp)</label><input id="dphone" inputmode="tel" value="${esc(me.phone || "")}" placeholder="5555 5555"></div>
       <div class="field"><label for="demail">Correo</label><input id="demail" type="email" inputmode="email" value="${esc(me.email || "")}" placeholder="nombre@correo.com"></div>
       <div class="grid2"><div class="field"><label for="dbday">Cumpleaños</label><input id="dbday" type="date" value="${esc(me.birthday || "")}"></div>
@@ -316,7 +320,7 @@
         e.currentTarget.disabled = true;
         const { error } = await sb.rpc("kaleos_update_my_contact", f);
         if (error) { e.currentTarget.disabled = false; return toast(errMsg(error), 4000); }
-        Object.assign(me, { phone: f.p_phone || null, email: f.p_email || null, birthday: f.p_birthday, wedding_date: f.p_wedding, preferred_channel: ch });
+        Object.assign(me, { phone: f.p_phone || null, email: f.p_email || null, birthday: f.p_birthday, wedding_date: f.p_wedding, preferred_channel: ch, contact_updated_at: new Date().toISOString() });
         toast("Datos guardados. ¡Gracias!"); close(); if (tab === "tarjeta") go("tarjeta");
       });
     });
