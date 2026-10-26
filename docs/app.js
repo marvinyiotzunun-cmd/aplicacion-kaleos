@@ -11,6 +11,14 @@
   ];
   const STAGE_NAME = Object.fromEntries(STAGES);
   const ROLE_NAME = { member: "Miembro", usher: "Ujier", pastor: "Pastor" };
+  // Pedidos de los hermanos: [ícono, nombre, ayuda para la nota]
+  const REQ_KINDS = {
+    felicitacion: ["🎉", "Felicitación", "¿Qué celebramos? Cumpleaños, graduación, aniversario…"],
+    visita: ["🏠", "Visita", "¿Qué día y hora le conviene? ¿Algún motivo?"],
+    oracion: ["🙏", "Oración", "¿Por qué desea que oremos? (opcional)"],
+    otro: ["✉️", "Otro", "Cuéntele al pastor qué necesita"],
+  };
+  const REQ_STATUS = { nueva: "Nuevo", orando: "En camino", atendida: "Atendido" };
   const VERSES = [
     ["«Jehová te bendiga, y te guarde.»", "Números 6:24"],
     ["«Enséñanos de tal modo a contar nuestros días, que traigamos al corazón sabiduría.»", "Salmos 90:12"],
@@ -182,8 +190,8 @@
 
   // ===== estructura con pestañas =====
   function tabsFor(role) {
-    if (role === "pastor") return [["panel", "🏠", "Panel"], ["hermanos", "👥", "Hermanos"], ["saludos", "💌", "Saludos"], ["escanear", "📷", "Escanear"], ["reporte", "📊", "Reporte"], ["iglesia", "⛪", "Iglesia"]];
-    const t = [["tarjeta", "🪪", "Tarjeta"], ["camino", "🛤️", "Camino"]];
+    if (role === "pastor") return [["panel", "🏠", "Panel"], ["pedidos", "📥", "Pedidos"], ["hermanos", "👥", "Hermanos"], ["saludos", "💌", "Saludos"], ["escanear", "📷", "Escanear"], ["reporte", "📊", "Reporte"], ["iglesia", "⛪", "Iglesia"]];
+    const t = [["tarjeta", "🪪", "Tarjeta"], ["pedir", "🙏", "Pedir"], ["camino", "🛤️", "Camino"]];
     if (role === "usher") t.push(["escanear", "📷", "Escanear"]);
     t.push(["iglesia", "⛪", "Iglesia"]);
     return t;
@@ -216,7 +224,8 @@
     });
     window.scrollTo(0, 0);
     const views = { tarjeta: viewCard, camino: viewPath, iglesia: me.role === "pastor" ? viewChurchAdmin : viewChurch,
-      escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport, saludos: viewGreetings };
+      escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport, saludos: viewGreetings,
+      pedir: viewAsk, pedidos: viewRequests };
     Promise.resolve(views[name]($("#body"))).catch((e) => { $("#body").innerHTML = `<p class="muted">${esc(errMsg(e))}</p>`; });
   }
 
@@ -272,7 +281,8 @@
   async function askPrayer(ev) {
     const btn = ev && ev.currentTarget;
     if (btn) btn.disabled = true;
-    const { error } = await sb.from("kaleos_prayer_requests").insert({ church_id: me.church_id, profile_id: me.id });
+    const { data: req, error } = await sb.from("kaleos_prayer_requests").insert({ church_id: me.church_id, profile_id: me.id, kind: "oracion", created_by: me.id })
+      .select("id").single();
     if (btn) btn.disabled = false;
     if (error) return toast(errMsg(error));
     sheet("Petición enviada", `<p style="font-size:19px;margin:0">Su pastor ya recibió su petición. La iglesia está orando por usted. 🙏</p>
@@ -281,7 +291,7 @@
       $("#pns", s).addEventListener("click", async () => {
         const note = $("#pn", s).value.trim();
         if (!note) return close();
-        await sb.from("kaleos_prayer_requests").insert({ church_id: me.church_id, profile_id: me.id, note });
+        await sb.from("kaleos_prayer_requests").update({ note }).eq("id", req.id);
         toast("Detalle enviado"); close();
       });
     });
@@ -420,7 +430,7 @@
           <button class="pill solid" data-greet="${b.id}">Felicitar</button></div>`, "Nadie cumple años esta semana.")}
         ${list(p.absent, (a) => `<div class="row"><span class="grow">${esc(a.name)} · ${Math.floor(daysAgo(a.last) / 7)} domingos sin venir</span>
           <button class="pill w" data-visit="${a.id}" data-name="${esc(a.name)}">Visitar</button></div>`, "Nadie lleva 3 domingos sin venir.")}
-        <div class="row"><span class="grow">${p.prayers_new} ${p.prayers_new === 1 ? "petición de oración nueva" : "peticiones de oración nuevas"}</span><button class="pill b" id="prayers">Ver</button></div>
+        <div class="row"><span class="grow">📥 ${p.prayers_new} ${p.prayers_new === 1 ? "pedido nuevo" : "pedidos nuevos"} de los hermanos</span><button class="pill b" id="prayers">Ver</button></div>
       </div>
       <div class="tile"><div class="lab f">Formar</div>
         <div class="row"><span class="grow">Listos para bautismo</span><button class="pill g" data-who="ready_baptism">${p.ready_baptism.length}</button></div>
@@ -438,7 +448,7 @@
       if (d < today()) d = (Number(today().slice(0, 4)) + 1) + "-" + md;
       greetSheet({ kind: "cumple", key: "cumple", date: d, m: { id: b.id, full_name: b.name, title: b.title, phone: b.phone } });
     }));
-    $("#prayers", el).addEventListener("click", prayersSheet);
+    $("#prayers", el).addEventListener("click", () => go("pedidos"));
     $("#torep", el).addEventListener("click", () => go("reporte"));
     const titles = { ready_baptism: "Listos para bautismo", ready_lead: "Listos para liderar", visitors_no_follow: "Visitantes sin seguimiento" };
     el.querySelectorAll("[data-who]").forEach((b) => b.addEventListener("click", () => {
@@ -461,20 +471,129 @@
     });
   }
 
-  async function prayersSheet() {
-    const { data } = await sb.from("kaleos_prayer_requests").select("id, note, status, created_at, kaleos_profiles(full_name, phone)")
-      .eq("church_id", me.church_id).order("created_at", { ascending: false }).limit(50);
-    const next = { nueva: ["orando", "Orando"], orando: ["atendida", "Atendida"], atendida: null };
-    sheet("Peticiones de oración", `<div class="list">${(data || []).length ? data.map((r) => `
-      <div class="item" style="cursor:default;flex-wrap:wrap"><div class="grow"><b>${esc(r.kaleos_profiles?.full_name || "")}</b>
-        <span>${new Date(r.created_at).toLocaleString("es-GT", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" })} · ${esc(r.status)}</span>
+  // ===== pedidos: felicitación, visita, oración u otro =====
+  const reqWhen = (r) => new Date(r.created_at).toLocaleString("es-GT", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" });
+  const reqFor = (r) => [r.for_name ? "Para " + r.for_name : "", r.for_date ? fmtDate(r.for_date, "dm") : ""].filter(Boolean).join(" · ");
+  const REQ_SELECT = "id, kind, note, for_name, for_date, status, created_at, profile_id, who:kaleos_profiles!profile_id(id, full_name, title, phone)";
+
+  // Formulario de pedido. Con pastor = lista de hermanos, el pastor lo anota en nombre de alguien.
+  function requestSheet(kind, after, pastor) {
+    const [icon, name, hint] = REQ_KINDS[kind];
+    const opts = pastor ? pastor.filter((m) => m.active).sort((a, b) => a.full_name.localeCompare(b.full_name))
+      .map((m) => `<option value="${m.id}">${esc(m.full_name)}</option>`).join("") : "";
+    sheet(`${icon} ${pastor ? "Nuevo pedido" : "Pedir " + name.toLowerCase()}`, `
+      ${pastor ? `<div class="chips" id="rk">${Object.entries(REQ_KINDS).map(([k, [i, l]]) => `<button class="chip${k === kind ? " on" : ""}" data-k="${k}">${i} ${l}</button>`).join("")}</div>
+        <div class="field"><label for="rw">¿Quién lo pide?</label><select id="rw"><option value="">Elija un hermano…</option>${opts}<option value="otro">Otra persona (no está en Kaleos)</option></select></div>` : ""}
+      <div class="field" id="rff"><label for="rf">¿Para quién?</label><input id="rf" placeholder="${pastor ? "Nombre, si es para otra persona" : "Déjelo vacío si es para usted"}"></div>
+      <div class="field" id="rdf"><label for="rd">${kind === "visita" ? "Fecha que le conviene (opcional)" : "Fecha de la celebración"}</label><input id="rd" type="date"></div>
+      <div class="field"><label for="rn">Nota</label><textarea id="rn" placeholder="${esc(hint)}"></textarea></div>
+      <button class="btn" id="rs">${pastor ? "Guardar pedido" : "Enviar al pastor"}</button>`, (s, close) => {
+      const show = () => {
+        $("#rff", s).style.display = kind === "oracion" || kind === "otro" ? (pastor ? "" : "none") : "";
+        $("#rdf", s).style.display = kind === "felicitacion" || kind === "visita" ? "" : "none";
+        $("#rdf label", s).textContent = kind === "visita" ? "Fecha que le conviene (opcional)" : "Fecha de la celebración";
+        $("#rn", s).placeholder = REQ_KINDS[kind][2];
+        if (pastor) s.querySelectorAll("[data-k]").forEach((b) => b.classList.toggle("on", b.dataset.k === kind));
+      };
+      if (pastor) s.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", () => { kind = b.dataset.k; show(); }));
+      show();
+      $("#rs", s).addEventListener("click", async () => {
+        const note = $("#rn", s).value.trim(), forName = $("#rf", s).value.trim();
+        let who = pastor ? $("#rw", s).value : me.id;
+        if (!who) return toast("Elija quién lo pide");
+        if (who === "otro") {
+          if (!forName) return toast("Escriba el nombre de la persona");
+          who = me.id;
+        }
+        if (kind === "otro" && !note) return toast("Cuéntele al pastor qué necesita");
+        const btn = $("#rs", s);
+        btn.disabled = true;
+        const { error } = await sb.from("kaleos_prayer_requests").insert({ church_id: me.church_id, profile_id: who || me.id, kind,
+          note: note || null, for_name: forName || null, for_date: (kind === "felicitacion" || kind === "visita") && $("#rd", s).value || null, created_by: me.id });
+        btn.disabled = false;
+        if (error) return toast(errMsg(error), 4000);
+        close();
+        if (pastor) toast("Pedido guardado");
+        else sheet("Pedido enviado", `<p style="font-size:19px;margin:0">Su pastor ya recibió su pedido. ${kind === "oracion" ? "La iglesia está orando por usted. 🙏" : "Pronto le atenderá. 🙌"}</p>
+          <button class="btn sec" data-close>Listo</button>`);
+        if (after) after();
+      });
+    });
+  }
+
+  // ----- hermano: pedir -----
+  async function viewAsk(el) {
+    const { data } = await sb.from("kaleos_prayer_requests").select("id, kind, note, for_name, for_date, status, created_at")
+      .eq("profile_id", me.id).order("created_at", { ascending: false }).limit(20);
+    const mine = data || [];
+    el.innerHTML = `<h2 class="t">¿Qué necesita?</h2>
+      <div class="small">Su pastor recibe el pedido al instante.</div>
+      ${Object.entries(REQ_KINDS).map(([k, [i, l]]) => `<button class="big-btn" data-kind="${k}"><i>${i}</i>${k === "otro" ? "Otra cosa" : "Pedir " + l.toLowerCase()}</button>`).join("")}
+      <div class="small" style="margin-top:18px">Mis pedidos</div>
+      <div class="list">${mine.length ? mine.map((r) => `<div class="item" style="cursor:default"><div class="avatar sm">${REQ_KINDS[r.kind][0]}</div>
+        <div class="grow"><b>${REQ_KINDS[r.kind][1]}${reqFor(r) ? " · " + esc(reqFor(r)) : ""}</b><span>${reqWhen(r)}</span>
         ${r.note ? `<div style="margin-top:4px">${esc(r.note)}</div>` : ""}</div>
-        ${r.kaleos_profiles?.phone ? `<a class="pill b" href="tel:${phoneDigits(r.kaleos_profiles.phone)}">Llamar</a>` : ""}
-        ${next[r.status] ? `<button class="pill g" data-id="${r.id}" data-to="${next[r.status][0]}">${next[r.status][1]}</button>` : ""}</div>`).join("") : '<div class="empty">No hay peticiones todavía.</div>'}</div>`,
-      (s, close) => s.querySelectorAll("[data-to]").forEach((b) => b.addEventListener("click", async () => {
-        await sb.from("kaleos_prayer_requests").update({ status: b.dataset.to }).eq("id", b.dataset.id);
-        close(); prayersSheet(); if (tab === "panel") go("panel");
-      })));
+        <span class="pill ${r.status === "atendida" ? "g" : r.status === "orando" ? "b" : "w"}">${REQ_STATUS[r.status]}</span></div>`).join("")
+        : '<div class="empty">Aún no ha hecho pedidos.</div>'}</div>`;
+    el.querySelectorAll("[data-kind]").forEach((b) => b.addEventListener("click", () => requestSheet(b.dataset.kind, () => go("pedir"))));
+  }
+
+  // ----- pastor: bandeja de pedidos -----
+  let reqFilter = "todos";
+  async function viewRequests(el) {
+    const [{ data, error }, { data: members }] = await Promise.all([
+      sb.from("kaleos_prayer_requests").select(REQ_SELECT).eq("church_id", me.church_id).order("created_at", { ascending: false }).limit(150),
+      membersCache.length ? Promise.resolve({ data: membersCache }) : sb.from("kaleos_profiles").select("*").eq("church_id", me.church_id).order("full_name"),
+    ]);
+    if (error) throw error;
+    if (!membersCache.length) membersCache = members || [];
+    const all = (data || []).filter((r) => reqFilter === "todos" || r.kind === reqFilter);
+    const open = all.filter((r) => r.status !== "atendida");
+    const done = all.filter((r) => r.status === "atendida").slice(0, 20);
+    const count = (k) => (data || []).filter((r) => r.status !== "atendida" && (k === "todos" || r.kind === k)).length;
+    const item = (r) => {
+      const who = r.who || {};
+      const self = r.profile_id === me.id;
+      const acts = [];
+      if (who.phone && !self) acts.push(`<a class="pill b" href="tel:${phoneDigits(who.phone)}">Llamar</a>`,
+        `<a class="pill b" href="${waLink(who.phone, "")}" target="_blank" rel="noopener">WhatsApp</a>`);
+      if (r.status !== "atendida") {
+        if (r.kind === "felicitacion" && !r.for_name && !self) acts.push(`<button class="pill solid" data-card="${r.id}">Hacer tarjeta</button>`);
+        if (r.kind === "visita" && !self) acts.push(`<button class="pill solid" data-visit="${r.id}">Registrar visita</button>`);
+        if (r.status === "nueva") acts.push(`<button class="pill w" data-id="${r.id}" data-to="orando">${r.kind === "oracion" ? "Orando" : "En camino"}</button>`);
+        acts.push(`<button class="pill g" data-id="${r.id}" data-to="atendida">✓ Atendido</button>`);
+      } else acts.push(`<button class="pill w" data-id="${r.id}" data-to="nueva">Reabrir</button>`);
+      return `<div class="item" style="cursor:default;flex-wrap:wrap"><div class="avatar sm">${REQ_KINDS[r.kind][0]}</div>
+        <div class="grow"><b>${REQ_KINDS[r.kind][1]} · ${esc(self ? (r.for_name || "Anotado por usted") : who.full_name || "")}</b>
+          <span>${[self ? "" : reqFor(r), self && r.for_date ? fmtDate(r.for_date, "dm") : "", reqWhen(r), REQ_STATUS[r.status]].filter(Boolean).map(esc).join(" · ")}</span>
+          ${r.note ? `<div style="margin-top:4px">${esc(r.note)}</div>` : ""}</div>
+        <div class="chips" style="width:100%;justify-content:flex-end;gap:6px">${acts.join("")}</div></div>`;
+    };
+    el.innerHTML = `<h2 class="t">Pedidos de los hermanos</h2>
+      <div class="small">${count("todos")} ${count("todos") === 1 ? "pendiente" : "pendientes"}</div>
+      <button class="btn" id="radd">＋ Agregar pedido</button>
+      <div class="chips" style="margin:10px 0">${[["todos", "Todos"], ...Object.entries(REQ_KINDS).map(([k, [i, l]]) => [k, `${i} ${l}`])]
+        .map(([k, l]) => `<button class="chip${reqFilter === k ? " on" : ""}" data-f="${k}">${l}${count(k) ? ` (${count(k)})` : ""}</button>`).join("")}</div>
+      <div class="list">${open.length ? open.map(item).join("") : '<div class="empty">No hay pedidos pendientes.</div>'}</div>
+      ${done.length ? `<div class="small" style="margin-top:18px">Atendidos</div><div class="list">${done.map(item).join("")}</div>` : ""}`;
+    const byId = (id) => (data || []).find((r) => String(r.id) === String(id));
+    const setStatus = async (id, to) => {
+      const { error: e } = await sb.from("kaleos_prayer_requests").update({ status: to, done_at: to === "atendida" ? new Date().toISOString() : null }).eq("id", id);
+      if (e) return toast(errMsg(e));
+      if (tab === "pedidos") go("pedidos");
+    };
+    $("#radd", el).addEventListener("click", () => requestSheet(reqFilter === "todos" ? "oracion" : reqFilter, () => go("pedidos"), membersCache));
+    el.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => { reqFilter = b.dataset.f; go("pedidos"); }));
+    el.querySelectorAll("[data-to]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.id, b.dataset.to)));
+    el.querySelectorAll("[data-visit]").forEach((b) => b.addEventListener("click", () => {
+      const r = byId(b.dataset.visit);
+      visitSheet(r.who.id, r.who.full_name, () => setStatus(r.id, "atendida"));
+    }));
+    el.querySelectorAll("[data-card]").forEach((b) => b.addEventListener("click", () => {
+      const r = byId(b.dataset.card);
+      const label = r.note && r.note.length <= 60 ? r.note : "un día especial";
+      greetSheet({ kind: "especial", key: "pedido:" + r.id, date: r.for_date || today(), label, m: r.who }, () => setStatus(r.id, "atendida"));
+    }));
   }
 
   // ===== pastor: hermanos =====
@@ -1093,10 +1212,10 @@
         <div class="grid2"><div class="field"><label for="sn">Supervisor</label><input id="sn" value="${esc(church.supervisor_name || "")}"></div>
           <div class="field"><label for="se">Correo del supervisor</label><input id="se" type="email" value="${esc(church.supervisor_email || "")}"></div></div>
         <button class="btn" id="sv">Guardar datos</button></div>
-      <button class="btn sec" id="pr">🙏 Peticiones de oración</button>`;
+      <button class="btn sec" id="pr">📥 Pedidos de los hermanos</button>`;
     $("#mycard", el).addEventListener("click", () => { $("#body").innerHTML = ""; viewCard($("#body")); });
     $("#back", el).addEventListener("click", () => { $("#body").innerHTML = ""; viewChurch($("#body")); });
-    $("#pr", el).addEventListener("click", prayersSheet);
+    $("#pr", el).addEventListener("click", () => go("pedidos"));
     $("#pub", el).addEventListener("click", async () => {
       const body = $("#nb", el).value.trim();
       if (!body) return toast("Escriba el aviso");
