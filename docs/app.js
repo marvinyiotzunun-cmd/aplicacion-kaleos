@@ -253,9 +253,11 @@
         <div class="qrwrap"><div class="qr">${qrSvg("KALEOS:" + me.qr_token)}</div>
           <p>Muestre este código al ujier al entrar.</p></div>
       </div>
+      <button class="big-btn" id="mydata"><i>✏️</i>Mis datos y cómo recibir mensajes</button>
       ${streak > 0 ? `<div class="streak"><div class="dot">★</div><div>${streak} ${streak === 1 ? "domingo" : "domingos seguidos"}<div class="small">¡Gracias por congregarse!</div></div></div>` : ""}`;
     if (bday) { confetti(); $("#pray").addEventListener("click", askPrayer); }
     if (unread.length) $("#news").addEventListener("click", () => go("mensajes"));
+    $("#mydata").addEventListener("click", myDataSheet);
   }
 
   function confetti() {
@@ -287,6 +289,35 @@
         if (!note) return close();
         await sb.from("kaleos_prayer_requests").insert({ church_id: me.church_id, profile_id: me.id, note });
         toast("Detalle enviado"); close();
+      });
+    });
+  }
+
+  // Cada hermano mantiene al día sus datos de contacto y elige cómo recibir los mensajes del pastor
+  function myDataSheet() {
+    let ch = me.preferred_channel || "whatsapp";
+    sheet("Mis datos", `<p class="muted" style="margin:0">Con estos datos su pastor le felicita y le avisa de las actividades.</p>
+      <div class="field"><label for="dphone">Teléfono (WhatsApp)</label><input id="dphone" inputmode="tel" value="${esc(me.phone || "")}" placeholder="5555 5555"></div>
+      <div class="field"><label for="demail">Correo</label><input id="demail" type="email" inputmode="email" value="${esc(me.email || "")}" placeholder="nombre@correo.com"></div>
+      <div class="grid2"><div class="field"><label for="dbday">Cumpleaños</label><input id="dbday" type="date" value="${esc(me.birthday || "")}"></div>
+        <div class="field"><label for="dwed">Aniversario de bodas</label><input id="dwed" type="date" value="${esc(me.wedding_date || "")}"></div></div>
+      <div class="field"><label>¿Cómo prefiere recibir los mensajes?</label>
+        <div class="chips">${Object.entries(CHANNELS).map(([k, l]) => `<button class="chip" data-ch="${k}">${k === "whatsapp" ? "💬 " : k === "correo" ? "✉️ " : "📬 "}${l}</button>`).join("")}</div>
+        <span class="small">Siempre le llegan también a la pestaña Mensajes de Kaleos.</span></div>
+      <button class="btn" id="dsave">Guardar mis datos</button>`, (s, close) => {
+      const mark = () => s.querySelectorAll("[data-ch]").forEach((b) => b.classList.toggle("on", b.dataset.ch === ch));
+      s.querySelectorAll("[data-ch]").forEach((b) => b.addEventListener("click", () => { ch = b.dataset.ch; mark(); }));
+      mark();
+      $("#dsave", s).addEventListener("click", async (e) => {
+        const f = { p_phone: $("#dphone", s).value.trim(), p_email: $("#demail", s).value.trim(),
+          p_birthday: $("#dbday", s).value || null, p_wedding: $("#dwed", s).value || null, p_channel: ch };
+        if (ch === "whatsapp" && !f.p_phone) return toast("Escriba su teléfono para recibir por WhatsApp");
+        if (ch === "correo" && !f.p_email) return toast("Escriba su correo para recibir por correo");
+        e.currentTarget.disabled = true;
+        const { error } = await sb.rpc("kaleos_update_my_contact", f);
+        if (error) { e.currentTarget.disabled = false; return toast(errMsg(error), 4000); }
+        Object.assign(me, { phone: f.p_phone || null, email: f.p_email || null, birthday: f.p_birthday, wedding_date: f.p_wedding, preferred_channel: ch });
+        toast("Datos guardados. ¡Gracias!"); close(); if (tab === "tarjeta") go("tarjeta");
       });
     });
   }
@@ -578,13 +609,14 @@
         <div class="field"><label for="fsince">Miembro desde</label><input id="fsince" type="date" value="${esc(m.member_since || "")}"></div>
         <div class="field"><label for="fbap">Bautismo</label><input id="fbap" type="date" value="${esc(m.baptism_date || "")}"></div></div>
       <div class="field"><label for="femail">Correo (opcional, para enviarle mensajes)</label><input id="femail" type="email" inputmode="email" value="${esc(m.email || "")}"></div>
+      <div class="field"><label for="fchan">Prefiere recibir los mensajes por</label><select id="fchan">${opt(Object.entries(CHANNELS), m.preferred_channel || "whatsapp")}</select></div>
       <div class="field"><label for="fwed">Aniversario de bodas (si es casado)</label><input id="fwed" type="date" value="${esc(m.wedding_date || "")}"></div>
       <div class="field"><label for="fserves">Sirve en</label><input id="fserves" value="${esc(m.serves_in || "")}" placeholder="Damas Dorcas, alabanza, ujieres…"></div>`;
   }
   function readFields(s) {
     const v = (id) => { const x = $("#" + id, s).value.trim(); return x === "" ? null : x; };
     return { title: v("ftitle"), full_name: v("fname"), stage: v("fstage"), role: v("frole"), phone: v("fphone"),
-      birthday: v("fbday"), member_since: v("fsince"), baptism_date: v("fbap"), wedding_date: v("fwed"), email: v("femail"), serves_in: v("fserves") };
+      birthday: v("fbday"), member_since: v("fsince"), baptism_date: v("fbap"), wedding_date: v("fwed"), email: v("femail"), preferred_channel: v("fchan"), serves_in: v("fserves") };
   }
 
   function memberForm(m) {
@@ -606,7 +638,7 @@
             go("hermanos");
           } else {
             const r = await callAdmin({ action: "create_member", ...f });
-            if ((f.wedding_date || f.email) && r.id) await sb.from("kaleos_profiles").update({ wedding_date: f.wedding_date, email: f.email }).eq("id", r.id);
+            if (r.id) await sb.from("kaleos_profiles").update({ wedding_date: f.wedding_date, email: f.email, preferred_channel: f.preferred_channel }).eq("id", r.id);
             close(); go("hermanos"); credentialsSheet(f.full_name, f.phone, r.member_no, r.pin);
           }
         } catch (err) { e.currentTarget.disabled = false; toast(errMsg(err), 4000); }
@@ -986,11 +1018,35 @@
     if (error) throw error;
   }
 
-  // Hoja de envío común: vista previa de la tarjeta, mensaje y los tres canales (WhatsApp, correo, Kaleos)
+  // Cómo prefiere recibir cada hermano lo que envía el pastor (lo elige él mismo en «Mis datos»)
+  const CHANNELS = { whatsapp: "WhatsApp", correo: "Correo", app: "Solo en Kaleos" };
+  // Medio real para un hermano: su preferido si tiene el dato; si no, el que tenga; si no, solo Kaleos
+  function channelFor(m) {
+    const has = { whatsapp: !!(m && m.phone), correo: !!(m && m.email), app: true };
+    const pref = (m && m.preferred_channel) || "whatsapp";
+    if (has[pref]) return pref;
+    return has.whatsapp ? "whatsapp" : has.correo ? "correo" : "app";
+  }
+  function deliveryNote(to, all) {
+    if (to) {
+      const ch = channelFor(to);
+      return `Le llega a ${esc(to.full_name.split(" ")[0])} en su app de Kaleos` +
+        (ch === "whatsapp" ? ` y por <b>WhatsApp</b> (${esc(to.phone)}).` : ch === "correo" ? ` y por <b>correo</b> (${esc(to.email)}).` : ".");
+    }
+    const mail = all.filter((m) => channelFor(m) === "correo").length;
+    return `Le llega a toda la iglesia en la app de Kaleos y usted lo comparte en la <b>comunidad de WhatsApp</b>` +
+      (mail ? `; luego se abre el correo para ${mail} ${mail === 1 ? "hermano que prefiere" : "hermanos que prefieren"} correo.` : ".");
+  }
+
+  // Hoja de envío común: vista previa de la tarjeta, mensaje y un solo botón «Enviar»
   async function sendSheet(opt) {
     try { await cardReady(); } catch (_) { return toast("No se pudo preparar la tarjeta. Revise la conexión."); }
-    let tpl = opt.tpl, vi = 0, file = null, savedInKaleos = false, msgEdited = false;
-    const to0 = opt.to || null;
+    let to0 = opt.to || null;
+    if (to0) { // datos al día del hermano (teléfono, correo, medio preferido)
+      const { data } = await sb.from("kaleos_profiles").select("*").eq("id", to0.id).maybeSingle();
+      if (data) to0 = data;
+    }
+    let tpl = opt.tpl, vi = 0, file = null, msgEdited = false;
     const slug = (to0 ? to0.full_name.split(" ")[0] : opt.fileName || "kaleos").normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "kaleos";
     const fname = `tarjeta-${slug}.png`;
     sheet(opt.title, `${opt.sub || ""}${opt.extraHtml || ""}
@@ -999,24 +1055,18 @@
         <button class="chip" id="ov">↻ Otro versículo</button></div>
       <div class="field"><label for="gm">Mensaje que acompaña la tarjeta</label><textarea id="gm" rows="7"></textarea></div>
       ${opt.sent ? `<div class="result"><div class="dot">✓</div><div>Ya se envió<div class="small">${new Date(opt.sent).toLocaleString("es-GT", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" })}</div></div></div>` : ""}
-      <div class="lab r" style="margin-top:4px">Enviar por</div>
-      <div class="channels">
-        <button class="chan" id="cw"><i>💬</i>WhatsApp</button>
-        <button class="chan" id="ce"><i>✉️</i>Correo</button>
-        <button class="chan" id="ck"><i>📬</i>Kaleos</button>
-      </div>
-      <div class="small" style="text-align:center">${opt.target
-        ? "WhatsApp: elija a la persona o el grupo de la iglesia. Correo y Kaleos: van a quien eligió en «Para»."
-        : `WhatsApp: elija a <b>${esc(to0.full_name)}</b>${to0.phone ? " (" + esc(to0.phone) + ")" : ""}. Kaleos: le llega a su app.`}</div>
-      <div class="grid2"><button class="btn sec" id="gd">Descargar imagen</button>${opt.log ? `<button class="btn sec" id="gk">Ya lo envié</button>` : ""}</div>`, (s, close) => {
+      <button class="btn ok big-send" id="go">Enviar</button>
+      <div class="small" id="how" style="text-align:center"></div>
+      <button class="linkish" id="gd">Descargar la imagen</button>`, (s, close) => {
       const cv = $(".gcard", s), gm = $("#gm", s);
       const target = () => (opt.target ? opt.target(s) : to0);
       const draw = () => {
-        file = null; savedInKaleos = false;
+        file = null;
         renderCard(cv, tpl, opt.card(vi, s));
         s.querySelectorAll("[data-tpl]").forEach((b) => b.classList.toggle("on", b.dataset.tpl === tpl));
         cv.toBlob((b) => { if (b) file = new File([b], fname, { type: "image/png" }); }, "image/png");
         if (!msgEdited) gm.value = opt.message(s);
+        $("#how", s).innerHTML = deliveryNote(target(), opt.recipients || []);
       };
       const download = () => {
         if (!file) return toast("Un momento, la tarjeta se está preparando…");
@@ -1025,54 +1075,47 @@
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       };
-      const finish = async (msg) => {
-        if (opt.log) { try { await opt.log(tpl, gm.value); } catch (err) { return toast(errMsg(err), 4000); } }
-        toast(msg); close(); if (opt.after) opt.after();
+      const share = async (text, phone) => {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], text }); } catch (err) { if (err.name !== "AbortError") toast(errMsg(err), 4000); }
+          return;
+        }
+        // Computadora: se descarga la imagen y se abre el chat con el mensaje escrito
+        download();
+        window.open(phone ? waLink(phone, text) : `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
       };
-      const saveInKaleos = async () => {
-        if (savedInKaleos) return;
-        const to = target();
-        const { error } = await sb.from("kaleos_messages").insert({ church_id: me.church_id, profile_id: to ? to.id : null,
-          kind: opt.kind(s), title: opt.msgTitle(s), body: gm.value, card: { tpl, c: opt.card(vi, s) },
-          event_at: opt.eventAt ? opt.eventAt(s) : null, created_by: me.id });
-        if (error) throw error;
-        savedInKaleos = true;
+      const mail = (emails, bcc, text) => {
+        const body = `${text}\n\nVea la tarjeta en Kaleos: ${location.origin + location.pathname}`;
+        const subject = opt.msgTitle(s) + " · " + churchShort();
+        location.href = `mailto:${bcc ? "" : encodeURIComponent(emails[0])}?${bcc ? "bcc=" + encodeURIComponent(emails.join(",")) + "&" : ""}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       };
       gm.addEventListener("input", () => { msgEdited = true; });
       s.querySelectorAll("[data-tpl]").forEach((b) => b.addEventListener("click", () => { tpl = b.dataset.tpl; draw(); }));
       $("#ov", s).addEventListener("click", () => { vi++; draw(); });
       $("#gd", s).addEventListener("click", download);
-      if (opt.log) $("#gk", s).addEventListener("click", () => finish("Marcado como enviado"));
       if (opt.bind) opt.bind(s, draw);
-      $("#ck", s).addEventListener("click", async (e) => {
-        e.currentTarget.disabled = true;
-        const to = target();
-        try { await saveInKaleos(); await finish(to ? `Enviado a la app de ${to.full_name.split(" ")[0]}` : "Enviado a la app de toda la iglesia"); }
-        catch (err) { e.currentTarget.disabled = false; toast(errMsg(err), 4000); }
-      });
-      $("#ce", s).addEventListener("click", async () => {
-        const to = target();
-        const emails = to ? [to.email].filter(Boolean) : (opt.recipients || []).map((m) => m.email).filter(Boolean);
-        if (!emails.length) return toast(to ? "Este hermano no tiene correo. Agréguelo en Hermanos › Editar." : "Ningún hermano tiene correo registrado todavía.", 4500);
-        try { await saveInKaleos(); } catch (err) { return toast(errMsg(err), 4000); }
-        const body = `${gm.value}\n\nVea la tarjeta en Kaleos: ${location.origin + location.pathname}`;
-        const subject = opt.msgTitle(s) + " · " + churchShort();
-        const q = `${to ? "" : "bcc=" + encodeURIComponent(emails.join(",")) + "&"}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        location.href = `mailto:${to ? encodeURIComponent(emails[0]) : ""}?${q}`;
-        setTimeout(() => finish("Correo listo. La tarjeta también quedó en Kaleos."), 600);
-      });
-      $("#cw", s).addEventListener("click", async () => {
+      $("#go", s).addEventListener("click", async (e) => {
         if (!file) return toast("Un momento, la tarjeta se está preparando…");
-        const text = gm.value, to = target();
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try { await navigator.share({ files: [file], text }); await finish("Enviado por WhatsApp"); }
-          catch (err) { if (err.name !== "AbortError") toast(errMsg(err), 4000); }
-          return;
+        const btn = e.currentTarget, to = target(), text = gm.value;
+        btn.disabled = true;
+        // 1) Siempre queda en el buzón «Mensajes» de la app
+        const { error } = await sb.from("kaleos_messages").insert({ church_id: me.church_id, profile_id: to ? to.id : null,
+          kind: opt.kind(s), title: opt.msgTitle(s), body: text, card: { tpl, c: opt.card(vi, s) },
+          event_at: opt.eventAt ? opt.eventAt(s) : null, created_by: me.id });
+        if (error) { btn.disabled = false; return toast(errMsg(error), 4000); }
+        // 2) Además, por el medio que cada hermano prefiere
+        if (to) {
+          const ch = channelFor(to);
+          if (ch === "whatsapp") await share(text, to.phone);
+          else if (ch === "correo") mail([to.email], false, text);
+        } else {
+          await share(text, null);
+          const emails = (opt.recipients || []).filter((m) => channelFor(m) === "correo").map((m) => m.email);
+          if (emails.length) mail(emails, true, text);
         }
-        // Computadora: se descarga la imagen y se abre el chat con el mensaje escrito
-        download();
-        window.open(to && to.phone ? waLink(to.phone, text) : `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
-        toast(opt.log ? "La imagen se descargó. Adjúntela en el chat y luego toque «Ya lo envié»." : "La imagen se descargó. Adjúntela en el chat.", 6000);
+        if (opt.log) { try { await opt.log(tpl, text); } catch (err) { toast(errMsg(err), 4000); } }
+        toast(to ? `Enviado a ${to.full_name.split(" ")[0]}` : "Enviado a toda la iglesia");
+        close(); if (opt.after) opt.after();
       });
       draw();
     });

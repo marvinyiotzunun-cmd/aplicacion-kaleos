@@ -38,3 +38,22 @@ create policy kaleos_message_reads_own on public.kaleos_message_reads for all to
   with check (profile_id = auth.uid() and exists (
     select 1 from public.kaleos_messages m where m.id = message_id and m.church_id = public.kaleos_my_church()
       and (m.profile_id is null or m.profile_id = auth.uid())));
+
+-- Cada hermano elige cómo recibir los mensajes del pastor y mantiene al día sus datos de contacto
+alter table public.kaleos_profiles add column if not exists preferred_channel text not null default 'whatsapp';
+alter table public.kaleos_profiles drop constraint if exists kaleos_profiles_preferred_channel_check;
+alter table public.kaleos_profiles add constraint kaleos_profiles_preferred_channel_check
+  check (preferred_channel in ('whatsapp','correo','app'));
+
+create or replace function public.kaleos_update_my_contact(p_phone text, p_email text, p_birthday date, p_wedding date, p_channel text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_channel not in ('whatsapp','correo','app') then raise exception 'Medio no válido'; end if;
+  update public.kaleos_profiles
+     set phone = nullif(trim(p_phone), ''), email = nullif(trim(p_email), ''),
+         birthday = p_birthday, wedding_date = p_wedding, preferred_channel = p_channel
+   where id = auth.uid() and active;
+end $$;
+
+revoke execute on function public.kaleos_update_my_contact(text, text, date, date, text) from public, anon;
+grant execute on function public.kaleos_update_my_contact(text, text, date, date, text) to authenticated;
