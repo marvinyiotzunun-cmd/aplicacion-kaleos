@@ -26,8 +26,8 @@ a{color:var(--royal)}
 .splash .org{font-size:12px;letter-spacing:.18em;font-weight:700}
 .splash .org.thin{font-weight:500;opacity:.85;margin-top:2px;letter-spacing:.1em}
 .login{width:100%;max-width:360px;margin-top:26px;display:flex;flex-direction:column;gap:12px;text-align:left}
-.login label{color:#fff}
-.login .field input{background:rgba(255,255,255,.96);border:0}
+.login label,.login .field label{color:#fff}
+.login .field input{background:#fff;border:0;color:var(--text);-webkit-text-fill-color:var(--text)}
 .login .btn{background:#fff;color:var(--royal)}
 .login .help{color:rgba(255,255,255,.85);font-size:14px;text-align:center}
 .login .help a{color:#fff}
@@ -129,10 +129,13 @@ h2.t{font-size:22px;margin:4px 0 0;color:var(--navy);font-weight:800}
 .item span{font-size:13px;color:var(--muted)}
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:14px;font-weight:700;color:var(--navy)}
-.field input,.field select,.field textarea{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font-size:17px;width:100%}
+.field input,.field select,.field textarea{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;color:var(--text);caret-color:var(--royal);font-size:17px;width:100%}
+.field input::placeholder,.field textarea::placeholder,.search::placeholder{color:#9AA2B8;opacity:1}
+/* Chrome autocompletado: mantener fondo blanco y letra oscura */
+.field input:-webkit-autofill,.search:-webkit-autofill{-webkit-text-fill-color:var(--text);-webkit-box-shadow:0 0 0 1000px #fff inset;box-shadow:0 0 0 1000px #fff inset;caret-color:var(--royal)}
 .field textarea{min-height:96px;resize:vertical}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.search{border:1px solid var(--line);border-radius:12px;padding:12px;width:100%;background:#fff;font-size:17px}
+.search{border:1px solid var(--line);border-radius:12px;padding:12px;width:100%;background:#fff;color:var(--text);font-size:17px}
 .secret{background:var(--ice);border-radius:14px;padding:14px;text-align:center}
 .secret b{font-size:28px;letter-spacing:.2em;color:var(--navy);display:block}
 
