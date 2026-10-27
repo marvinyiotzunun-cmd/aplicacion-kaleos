@@ -1,5 +1,5 @@
 // Guarda la app para que abra rápido y sin señal (los datos siempre vienen de la red)
-const CACHE = "kaleos-v4";
+const CACHE = "kaleos-v6";
 const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./vendor/supabase.js", "./vendor/qrcode.js",
   "./vendor/jsQR.js", "./img/logo.png", "./img/mark.png", "./img/mark-w.png", "./img/icon-192.png"];
 
