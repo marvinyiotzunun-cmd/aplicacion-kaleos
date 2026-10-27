@@ -192,10 +192,10 @@
 
   // ===== estructura con pestañas =====
   function tabsFor(role) {
-    if (role === "pastor") return [["panel", "🏠", "Panel"], ["pedidos", "📥", "Pedidos"], ["hermanos", "👥", "Hermanos"], ["saludos", "💌", "Saludos"], ["escanear", "📷", "Escanear"], ["reporte", "📊", "Reporte"], ["iglesia", "⛪", "Iglesia"]];
-    const t = [["tarjeta", "🪪", "Tarjeta"], ["mensajes", "📬", "Mensajes"], ["pedir", "🙏", "Pedir"], ["camino", "🛤️", "Camino"]];
-    if (role === "usher") t.push(["escanear", "📷", "Escanear"]);
-    t.push(["iglesia", "⛪", "Iglesia"]);
+    if (role === "pastor") return [["panel", "panel", "Panel"], ["pedidos", "mensajes", "Pedidos"], ["hermanos", "hermanos", "Hermanos"], ["saludos", "saludos", "Saludos"], ["escanear", "escanear", "Escanear"], ["reporte", "reporte", "Reporte"], ["iglesia", "iglesia", "Iglesia"]];
+    const t = [["tarjeta", "inicio", "Inicio"], ["mensajes", "mensajes", "Mensajes"], ["pedir", "pedir", "Pedir"], ["camino", "camino", "Camino"]];
+    if (role === "usher") t.push(["escanear", "escanear", "Escanear"]);
+    t.push(["iglesia", "iglesia", "Iglesia"]);
     return t;
   }
 
@@ -204,7 +204,7 @@
     const tabs = tabsFor(role);
     app.innerHTML = `<main class="page" id="page"></main>
       <nav class="tabs" aria-label="Secciones"><div class="in">${tabs.map(([k, i, l]) =>
-        `<button class="tab" data-tab="${k}"><i aria-hidden="true">${i}</i>${l}</button>`).join("")}</div></nav>`;
+        `<button class="tab" data-tab="${k}">${icon(i)}${l}</button>`).join("")}</div></nav>`;
     app.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => go(b.dataset.tab)));
     go(start);
     if (role !== "pastor") refreshInboxBadge();
@@ -227,10 +227,347 @@
       await sb.auth.signOut(); me = null; renderLogin();
     });
     window.scrollTo(0, 0);
-    const views = { tarjeta: viewCard, camino: viewPath, iglesia: me.role === "pastor" ? viewChurchAdmin : viewChurch,
+    const views = { tarjeta: viewHome, camino: viewPath, iglesia: me.role === "pastor" ? viewChurchAdmin : viewChurch,
       escanear: viewScan, panel: viewPanel, hermanos: viewMembers, reporte: viewReport, saludos: viewGreetings, mensajes: viewInbox,
       pedir: viewAsk, pedidos: viewRequests };
     Promise.resolve(views[name]($("#body"))).catch((e) => { $("#body").innerHTML = `<p class="muted">${esc(errMsg(e))}</p>`; });
+  }
+
+  // ===== íconos propios de Kaleos (trazos dibujados para la app, sin librerías) =====
+  const ICONS = {
+    inicio: '<path d="M5 21V10.5a7 7 0 0 1 14 0V21"/><path d="M9.6 21v-5.6a2.4 2.4 0 0 1 4.8 0V21"/><path d="M3 21h18"/><circle class="d" cx="12" cy="8" r="1.15"/>',
+    mensajes: '<rect x="3" y="5.5" width="18" height="13.5" rx="2.2"/><path d="M3.6 7.2l8.4 6.3 8.4-6.3"/><circle class="d" cx="12" cy="16" r="1.3"/>',
+    pedir: '<path d="M2.5 13.6c2 0 3.3.8 4.5 2.2l1.4 1.6h3.8a1.5 1.5 0 0 0 0-3H9.7"/><path d="M6.6 21.2l1.1-1.3c.6-.6 1.3-.9 2.2-.9h5c1.1 0 1.9-.4 2.6-1.1l3.6-3.6a1.4 1.4 0 0 0-2-2l-3.3 2.6"/><path d="M14.3 9.6c0-2.4 1.8-3.1 1.8-5.4"/><circle class="d" cx="16.1" cy="3" r="1.15"/>',
+    camino: '<path d="M3 20.5h4.2v-4.2h4.2v-4.2h4.2V7.9h4.2"/><path d="M19.8 7.9V6.2"/><circle class="d" cx="19.8" cy="4.2" r="1.35"/>',
+    escanear: '<path d="M4 8.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/><path d="M4 12h16"/><circle class="d" cx="12" cy="12" r="1.2"/>',
+    iglesia: '<path d="M12 2.5v4M10.3 4.2h3.4"/><path d="M5 21V11l7-4.5 7 4.5v10"/><path d="M3 21h18"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/><circle class="d" cx="12" cy="12.3" r="1.1"/>',
+    hermanos: '<circle cx="9" cy="8.2" r="3.2"/><path d="M2.8 20.2c.5-3.6 3-5.5 6.2-5.5s5.7 1.9 6.2 5.5"/><path d="M15.4 5.2a3 3 0 1 1 .8 5.8M17.6 14.9c2 .6 3.2 2.3 3.6 5.3"/><circle class="d" cx="9" cy="17.6" r="1"/>',
+    saludos: '<path d="M7.2 19.4C4.1 17.4 3 13.9 4 10"/><path d="M16.8 19.4c3.1-2 4.2-5.5 3.2-9.4"/><path d="M5.5 15.6 3.2 16M4.5 12.5l-2-.6M7.6 17.8l-1.3 1.5M18.5 15.6l2.3.4M19.5 12.5l2-.6M16.4 17.8l1.3 1.5"/><path d="m12 6.3 1.3 2.7 3 .4-2.2 2.1.6 2.9-2.7-1.4-2.7 1.4.6-2.9-2.2-2.1 3-.4z"/><circle class="d" cx="12" cy="19.8" r="1.1"/>',
+    reporte: '<path d="M4 3.5v17h16.5"/><path d="M8.5 16.5v-4M12.5 16.5V8.5M16.5 16.5v-6"/><circle class="d" cx="12.5" cy="5.5" r="1.1"/>',
+    panel: '<path d="M2.8 14.4c0 2.1 3.7 3.4 8.2 3.4 3.4 0 5.9-.9 7.4-2.4l2.9-2.7h-7.1c-2-1.5-5-1.6-7.6-1-2.1.5-3.8 1.4-3.8 2.7z"/><path d="M8.2 17.7l-.9 2.8h7.5l-.9-2.8"/><path class="d" d="M20.3 10.7c-1.3-.6-1.9-1.7-1.6-3.1.2-1 .9-1.8 1.4-2.9.6 1.1 1.5 1.9 1.5 3.3 0 1.3-.5 2.1-1.3 2.7z"/>',
+    kaleos: '<path d="M6.5 3.5v17"/><path d="M17 3.5c-4.2 3-6.4 5.6-6.4 8.5s2.2 5.5 6.4 8.5"/><path d="M20 8.2c-1.3 1-2 2.3-2 3.8s.7 2.8 2 3.8" opacity=".55"/><circle class="d" cx="13.2" cy="12" r="1.25"/>',
+    agenda: '<path d="M4 20.2V10a8 3.6 0 0 1 16 0v10.2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4.2 11.2h15.6"/><path d="M8.5 3.2v3M15.5 3.2v3"/><circle class="d" cx="15.6" cy="16" r="1.25"/>',
+    lugar: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle class="d" cx="12" cy="10" r="2"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    estrella: '<path d="m12 4.5 2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"/>',
+    no: '<path d="M6 6l12 12M18 6 6 18"/>',
+    chat: '<path d="M4.2 19.8 5.3 16a8 8 0 1 1 2.9 2.8z"/><path d="M9 9.6c.3 2.3 2.2 4.3 4.6 4.8l1-1.2 1.7.9"/>',
+    flecha: '<path d="M9.5 6l6 6-6 6"/>',
+    datos: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/><circle class="d" cx="5.6" cy="18.4" r=".9"/>',
+  };
+  const icon = (n, c = "") => `<svg class="ki ${c}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
+
+  // ===== imágenes generadas (luz, cumbres, aurora, olas) para el versículo y los anuncios =====
+  const ART_PAL = {
+    alba: ["#1c2240", "#c8734a", "#f3c47c"], olivo: ["#1b281f", "#6f8a5b", "#ecdfad"], vino: ["#2a1320", "#8b3346", "#eeb08a"],
+    mar: ["#0d2030", "#2e6e8e", "#c6e8e2"], ocaso: ["#191634", "#5d418c", "#eaafc6"], oro: ["#17130e", "#8d6622", "#f3d48f"], cielo: ["#22365c", "#7fa5cb", "#f5f0e4"],
+  };
+  const ART_KINDS = ["cumbres", "luz", "aurora", "olas"];
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const mixRgba = (a, b, t, al = 1) => { const A = hexRgb(a), B = hexRgb(b); return `rgba(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(",")},${al})`; };
+  const alpha = (h, a) => mixRgba(h, h, 0, a);
+  function rng(seed) { let a = (seed * 9301 + 49297) >>> 0 || 1; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  let grain = null;
+  function grainCanvas() {
+    if (grain) return grain;
+    grain = document.createElement("canvas"); grain.width = grain.height = 160;
+    const x = grain.getContext("2d"), d = x.createImageData(160, 160), R = rng(11);
+    for (let i = 0; i < d.data.length; i += 4) { const v = Math.floor(R() * 255); d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+    x.putImageData(d, 0, 0); return grain;
+  }
+  function paintArt(ctx, w, h, o) {
+    const R = rng(o.seed || 3), [c0, c1, c2] = ART_PAL[o.pal] || ART_PAL.alba, u = Math.min(w, h);
+    ctx.save();
+    const g = ctx.createLinearGradient(0, 0, w * 0.2, h);
+    g.addColorStop(0, c0); g.addColorStop(0.58, mixRgba(c0, c1, 0.6)); g.addColorStop(1, c1);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    if (o.kind === "cumbres") {
+      const sx = w * (0.28 + R() * 0.44), sy = h * (0.5 + R() * 0.08);
+      const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, u * 0.8);
+      rg.addColorStop(0, alpha(c2, 0.85)); rg.addColorStop(0.25, alpha(c2, 0.28)); rg.addColorStop(1, alpha(c2, 0));
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = alpha(c2, 0.95); ctx.beginPath(); ctx.arc(sx, sy, u * 0.065, 0, 7); ctx.fill();
+      for (let i = 0; i < 5; i++) {
+        const y0 = h * (0.56 + i * 0.085), f1 = 2 + R() * 3, f2 = 6 + R() * 6, p1 = R() * 6, p2 = R() * 6, a1 = h * (0.05 - i * 0.004), a2 = h * 0.015;
+        ctx.beginPath(); ctx.moveTo(0, h);
+        for (let x = 0; x <= w + 8; x += w / 90) { const t = x / w; ctx.lineTo(x, y0 - Math.sin(t * f1 + p1) * a1 - Math.abs(Math.sin(t * f2 + p2)) * a2); }
+        ctx.lineTo(w, h); ctx.closePath();
+        ctx.fillStyle = mixRgba(c1, c0, 0.3 + i * 0.16, 0.92); ctx.fill();
+      }
+    } else if (o.kind === "aurora") {
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 6; i++) {
+        const x = w * R(), y = h * R() * 0.9, r = u * (0.35 + R() * 0.45), c = i % 2 ? c2 : c1;
+        const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+        rg.addColorStop(0, alpha(c, 0.42)); rg.addColorStop(1, alpha(c, 0));
+        ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
+      }
+      ctx.globalCompositeOperation = "source-over"; ctx.lineWidth = Math.max(1, u * 0.0022);
+      for (let i = 0; i < 26; i++) {
+        ctx.strokeStyle = alpha(c2, 0.05 + R() * 0.08); ctx.beginPath();
+        const y = h * (0.2 + R() * 0.6); ctx.moveTo(-20, y);
+        ctx.bezierCurveTo(w * 0.3, y - h * 0.3 * R(), w * 0.7, y + h * 0.3 * R(), w + 20, y - h * 0.1 * R()); ctx.stroke();
+      }
+    } else if (o.kind === "luz") {
+      const ox = w * (0.15 + R() * 0.7), oy = -h * 0.08;
+      for (let i = 0; i < 11; i++) {
+        const a = Math.PI / 2 + (R() - 0.5) * 1.3, sp = 0.03 + R() * 0.07, L = h * 1.5;
+        const lg = ctx.createLinearGradient(ox, oy, ox + Math.cos(a) * L, oy + Math.sin(a) * L);
+        lg.addColorStop(0, alpha(c2, 0.28)); lg.addColorStop(1, alpha(c2, 0));
+        ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(ox, oy);
+        ctx.lineTo(ox + Math.cos(a - sp) * L, oy + Math.sin(a - sp) * L); ctx.lineTo(ox + Math.cos(a + sp) * L, oy + Math.sin(a + sp) * L); ctx.fill();
+      }
+      const rg = ctx.createRadialGradient(ox, 0, 0, ox, 0, u * 0.7);
+      rg.addColorStop(0, alpha(c2, 0.5)); rg.addColorStop(1, alpha(c2, 0));
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 140; i++) { ctx.fillStyle = alpha(c2, R() * 0.5); ctx.beginPath(); ctx.arc(w * R(), h * R(), u * 0.0035 * R() + 0.4, 0, 7); ctx.fill(); }
+    } else {
+      for (let i = 0; i < 9; i++) {
+        const y0 = h * (0.3 + i * 0.085), A = h * (0.02 + R() * 0.03), f = 1.5 + R() * 2.5, p = R() * 6;
+        ctx.beginPath(); ctx.moveTo(0, h);
+        for (let x = 0; x <= w + 8; x += w / 80) ctx.lineTo(x, y0 + Math.sin((x / w) * f * Math.PI + p) * A);
+        ctx.lineTo(w, h); ctx.closePath();
+        const lg = ctx.createLinearGradient(0, y0 - A, 0, h);
+        lg.addColorStop(0, mixRgba(c1, c0, i / 9, 0.55)); lg.addColorStop(1, alpha(c0, 0.8));
+        ctx.fillStyle = lg; ctx.fill();
+        ctx.strokeStyle = alpha(c2, 0.22 - i * 0.015); ctx.lineWidth = Math.max(1, u * 0.002); ctx.stroke();
+      }
+    }
+    const vg = ctx.createRadialGradient(w / 2, h * 0.45, u * 0.3, w / 2, h / 2, Math.max(w, h) * 0.8);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.38)");
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "overlay"; ctx.globalAlpha = 0.14;
+    ctx.fillStyle = ctx.createPattern(grainCanvas(), "repeat"); ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+  const artFor = (n) => ({ pal: Object.keys(ART_PAL)[n % 7], kind: ART_KINDS[(n * 3 + 1) % 4], seed: n + 3 });
+  // Pinta los lienzos con data-art cuando ya tienen tamaño en pantalla
+  function paintArtIn(root) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    root.querySelectorAll("canvas[data-art]").forEach((cv) => {
+      const w = cv.clientWidth, h = cv.clientHeight;
+      if (!w || !h || cv.dataset.done) return;
+      cv.dataset.done = 1; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
+      paintArt(ctx, w, h, artFor(Number(cv.dataset.art) || 0));
+    });
+  }
+
+  // ===== versículo del día (cambia cada día; Reina-Valera 1960) =====
+  const DAY_VERSES = [
+    ["Isaías 43:1", "No temas, porque yo te redimí; te puse nombre, mío eres tú."],
+    ["Salmos 118:24", "Este es el día que hizo Jehová; nos gozaremos y alegraremos en él."],
+    ["Salmos 23:1", "Jehová es mi pastor; nada me faltará."],
+    ["Salmos 119:105", "Lámpara es a mis pies tu palabra, y lumbrera a mi camino."],
+    ["Josué 1:9", "Mira que te mando que te esfuerces y seas valiente; no temas ni desmayes, porque Jehová tu Dios estará contigo en dondequiera que vayas."],
+    ["Lamentaciones 3:22-23", "Por la misericordia de Jehová no hemos sido consumidos, porque nunca decayeron sus misericordias. Nuevas son cada mañana; grande es tu fidelidad."],
+    ["Mateo 11:28", "Venid a mí todos los que estáis trabajados y cargados, y yo os haré descansar."],
+    ["Salmos 133:1", "¡Mirad cuán bueno y cuán delicioso es habitar los hermanos juntos en armonía!"],
+    ["Filipenses 4:13", "Todo lo puedo en Cristo que me fortalece."],
+    ["Salmos 46:1", "Dios es nuestro amparo y fortaleza, nuestro pronto auxilio en las tribulaciones."],
+    ["Proverbios 3:5", "Fíate de Jehová de todo tu corazón, y no te apoyes en tu propia prudencia."],
+    ["Jeremías 29:11", "Porque yo sé los pensamientos que tengo acerca de vosotros, dice Jehová, pensamientos de paz, y no de mal, para daros el fin que esperáis."],
+    ["Romanos 8:28", "Y sabemos que a los que aman a Dios, todas las cosas les ayudan a bien, esto es, a los que conforme a su propósito son llamados."],
+    ["Salmos 37:5", "Encomienda a Jehová tu camino, y confía en él; y él hará."],
+    ["Mateo 6:33", "Mas buscad primeramente el reino de Dios y su justicia, y todas estas cosas os serán añadidas."],
+    ["Juan 14:27", "La paz os dejo, mi paz os doy; yo no os la doy como el mundo la da. No se turbe vuestro corazón, ni tenga miedo."],
+    ["Números 6:24", "Jehová te bendiga, y te guarde."],
+    ["Salmos 121:1-2", "Alzaré mis ojos a los montes; ¿De dónde vendrá mi socorro? Mi socorro viene de Jehová, que hizo los cielos y la tierra."],
+    ["Isaías 40:31", "Pero los que esperan a Jehová tendrán nuevas fuerzas; levantarán alas como las águilas; correrán, y no se cansarán; caminarán, y no se fatigarán."],
+    ["1 Pedro 2:9", "Mas vosotros sois linaje escogido, real sacerdocio, nación santa, pueblo adquirido por Dios, para que anunciéis las virtudes de aquel que os llamó de las tinieblas a su luz admirable."],
+  ];
+  const dayIndex = () => { const t = today(); return Math.round((Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10)) - Date.UTC(2026, 0, 1)) / 86400000); };
+  function wrapLines(ctx, text, maxW) {
+    const words = text.split(/\s+/), lines = []; let l = "";
+    for (const w of words) { const t = l ? l + " " + w : w; if (ctx.measureText(t).width > maxW && l) { lines.push(l); l = w; } else l = t; }
+    if (l) lines.push(l); return lines;
+  }
+  function drawDayVerse(cv) {
+    const n = dayIndex(), [ref, text] = DAY_VERSES[((n % DAY_VERSES.length) + DAY_VERSES.length) % DAY_VERSES.length];
+    const W = 1080, H = 1080, M = 120, serif = '"Cormorant Garamond", Georgia, serif', sans = "Archivo, Arial, sans-serif";
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext("2d"), art = artFor(n + 2);
+    paintArt(ctx, W, H, art);
+    const acc = ART_PAL[art.pal][2], ls = (v) => { if ("letterSpacing" in ctx) ctx.letterSpacing = v; };
+    let s = 104, lines;
+    for (; s >= 42; s -= 3) { ctx.font = `italic 500 ${s}px ${serif}`; lines = wrapLines(ctx, text, W - M * 2); if (lines.length * s * 1.14 <= H - 420) break; }
+    const lh = s * 1.14, start = (H - lines.length * lh) / 2 + s * 0.7 - 30;
+    ctx.textAlign = "center"; ctx.fillStyle = "#FBF6EC"; ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 34;
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, start + i * lh));
+    const ry = start + (lines.length - 1) * lh + 100;
+    ctx.shadowBlur = 0; ctx.fillStyle = acc; ctx.fillRect(W / 2 - 24, ry - 44, 48, 2); ctx.fillStyle = "#FBF6EC";
+    ls("7px"); ctx.font = `700 27px ${sans}`; ctx.fillText(ref.toUpperCase(), W / 2, ry);
+    ctx.globalAlpha = 0.78; ls("6px"); ctx.font = `700 21px ${sans}`;
+    ctx.fillText(`IGLESIA DE DIOS E.C. · ${churchShort().toUpperCase()}`, W / 2, H - 76); ctx.globalAlpha = 1; ls("0px");
+    return { ref, text };
+  }
+
+  // Grabado fino del carnet (líneas doradas como en un billete)
+  function engrave(cv) {
+    const w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = w * dpr; cv.height = h * dpr; const x = cv.getContext("2d"); x.scale(dpr, dpr);
+    const cx = w * 0.86, cy = h * 0.18; x.lineWidth = 0.6;
+    for (let ring = 0; ring < 3; ring++) {
+      const Rr = w * (0.28 + ring * 0.12), r = Rr / (5.3 + ring), d = r * (1.6 + ring * 0.3);
+      x.strokeStyle = `rgba(216,178,106,${0.22 - ring * 0.05})`; x.beginPath();
+      for (let t = 0; t <= Math.PI * 24; t += 0.01) {
+        const X = cx + (Rr - r) * Math.cos(t) + d * Math.cos(((Rr - r) / r) * t), Y = cy + (Rr - r) * Math.sin(t) - d * Math.sin(((Rr - r) / r) * t);
+        t ? x.lineTo(X, Y) : x.moveTo(X, Y);
+      }
+      x.stroke();
+    }
+    x.strokeStyle = "rgba(216,178,106,.09)";
+    for (let i = 0; i < 26; i++) { x.beginPath(); x.moveTo(0, h * 0.62 + i * 3.2); x.bezierCurveTo(w * 0.3, h * 0.5 + i * 3.2, w * 0.6, h * 0.95 + i * 2, w, h * 0.7 + i * 3.4); x.stroke(); }
+  }
+
+  // ===== hermano: inicio (carnet, versículo del día y anuncios) =====
+  const RSVP = { si: ["Asistiré", "check"], tal: ["Me interesa", "estrella"], no: ["No podré", "no"] };
+  const ANN_KINDS = ["invitacion", "recordatorio", "aviso"];
+  let rsvpReady = true; // falso si la tabla de asistencia aún no existe en la base
+
+  async function homeData() {
+    const since = new Date(Date.now() - 14 * 86400000).toISOString(), now = Date.now() - 12 * 3600000;
+    const { data } = await sb.from("kaleos_messages").select("*").eq("church_id", me.church_id).is("profile_id", null)
+      .in("kind", ANN_KINDS).or(`event_at.gte.${new Date(now).toISOString()},and(event_at.is.null,created_at.gte.${since})`).limit(40);
+    const anns = (data || []).sort((a, b) => (a.event_at || a.created_at).localeCompare(b.event_at || b.created_at));
+    let rs = [];
+    if (anns.length) {
+      const r = await sb.from("kaleos_rsvp").select("message_id, profile_id, answer").in("message_id", anns.map((a) => a.id));
+      rsvpReady = !r.error; rs = r.data || [];
+    }
+    return { anns, rs };
+  }
+  const annWhen = (a) => a.event_at ? new Date(a.event_at) : null;
+  const dpart = (d, o) => d.toLocaleString("es-GT", { timeZone: TZ, ...o });
+
+  async function viewHome(el) {
+    const bday = isBirthday(me);
+    const [{ anns, rs }, unread] = await Promise.all([homeData(), unreadMessages()]);
+    const personal = unread.filter((x) => x.profile_id);
+    const mine = (id) => (rs.find((r) => r.message_id === id && r.profile_id === me.id) || {}).answer;
+    const going = (id) => rs.filter((r) => r.message_id === id && r.answer === "si").length;
+    const stageI = STAGES.findIndex(([k]) => k === me.stage);
+    el.innerHTML = `${personal.length ? `<button class="big-btn news" id="news"><i>${icon("mensajes")}</i>${personal.length === 1 ? "Tiene un mensaje del pastor" : `Tiene ${personal.length} mensajes del pastor`}</button>` : ""}
+      ${bday ? `<div class="kb-bday"><span class="eyebrow">Hoy, ${fmtDate(today(), "dm")}</span><b>¡Feliz cumpleaños, ${esc(me.full_name.split(" ")[0])}!</b><span>Del pastor y toda la congregación</span></div>` : ""}
+      <div class="kc" id="kc" role="button" tabindex="0" aria-label="Mi carnet. Toque para ver el código del ujier.">
+        <div class="kc-in">
+          <div class="kc-f"><canvas class="kc-g" aria-hidden="true"></canvas>
+            <div class="kc-c">
+              <div class="kc-top"><div><span>Iglesia de Dios E.C.</span><span>${esc(churchShort())}</span></div>${icon("kaleos", "kc-k")}</div>
+              <div class="kc-name">${esc(me.full_name)}</div>
+              <div class="kc-row"><div class="kc-lv"><span>${ROLE_NAME[me.role]}</span><i>${esc(STAGE_NAME[me.stage] || "")}</i>
+                <div class="ladder">${STAGES.map((_, i) => `<b class="${i <= stageI ? "on" : ""}"></b>`).join("")}</div></div>
+                <div class="kc-no">${esc(me.member_no)}<br><small>${me.member_since ? "desde " + String(me.member_since).slice(0, 4) : ""}</small></div></div>
+            </div></div>
+          <div class="kc-f kc-b"><div class="kc-qr"><div class="qr">${qrSvg("KALEOS:" + me.qr_token)}</div><span>Muéstrelo al ujier · ${esc(me.member_no)}</span></div></div>
+        </div>
+      </div>
+      <div class="kc-hint"><span>Toque el carnet para ver su código</span><button class="linkish" id="mydata">Mis datos</button></div>
+
+      <section class="ksec"><div class="ksec-h"><h2>Versículo del día</h2><span>${fmtDate(today(), "dm")}</span></div>
+        <canvas class="kverse" id="kverse" role="img"></canvas>
+        <div class="kc-hint"><span></span><button class="linkish" id="vshare">${icon("chat")}Compartir</button></div></section>
+
+      <section class="ksec"><div class="ksec-h"><h2>Anuncios</h2><span>${anns.length ? anns.length + (anns.length === 1 ? " próximo" : " próximos") : ""}</span></div>
+        ${anns.length ? `<div class="kann">${anns.map((a) => {
+          const d = annWhen(a) || new Date(a.created_at), r = mine(a.id), n = going(a.id);
+          return `<button class="kann-i" data-ann="${a.id}">
+            <span class="kthumb"><canvas data-art="${a.id}" aria-hidden="true"></canvas><span class="kdt"><b>${dpart(d, { day: "numeric" })}</b><span>${dpart(d, { month: "short" }).replace(".", "")}</span></span></span>
+            <span class="kann-t"><span class="ktag">${esc(KINDS[a.kind].name)}</span><b>${esc(a.title)}</b>
+              <span class="kmeta">${a.event_at ? esc(fmtWhen(a.event_at)) : "Publicado el " + dpart(d, { day: "numeric", month: "long" })}</span>
+              ${rsvpReady && a.event_at ? `<span class="krs">${r ? `<span class="kpill ${r}">${RSVP[r][0]}</span>` : ""}${n ? `<span>${n} ${n === 1 ? "asistirá" : "asistirán"}</span>` : ""}</span>` : ""}</span>
+            ${icon("flecha", "go")}</button>`;
+        }).join("")}</div>` : '<div class="empty">Aún no hay anuncios. Aquí aparecerán los cultos, reuniones y actividades que comparta su pastor.</div>'}
+      </section>`;
+    paintArtIn(el);
+    const kc = $("#kc", el);
+    const flip = () => kc.classList.toggle("flip");
+    kc.addEventListener("click", flip);
+    kc.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+    requestAnimationFrame(() => engrave($(".kc-g", el)));
+    const vcv = $("#kverse", el);
+    const draw = () => { const v = drawDayVerse(vcv); vcv.setAttribute("aria-label", `${v.text} ${v.ref}`); return v; };
+    let verse = draw();
+    if (document.fonts) Promise.all(['italic 500 60px "Cormorant Garamond"', '700 20px Archivo'].map((f) => document.fonts.load(f).catch(() => {}))).then(() => { if (vcv.isConnected) verse = draw(); });
+    $("#vshare", el).addEventListener("click", () => shareCanvas(vcv, `«${verse.text}» ${verse.ref}`, "versiculo-del-dia.png"));
+    $("#mydata", el).addEventListener("click", myDataSheet);
+    if (personal.length) $("#news", el).addEventListener("click", () => go("mensajes"));
+    el.querySelectorAll("[data-ann]").forEach((b) => b.addEventListener("click", () => openAnn(anns.find((a) => String(a.id) === b.dataset.ann), rs)));
+    if (bday) confetti();
+  }
+
+  function shareCanvas(cv, text, name) {
+    cv.toBlob(async (b) => {
+      const file = b && new File([b], name, { type: "image/png" });
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], text }); } catch (err) { if (err.name !== "AbortError") toast(errMsg(err)); }
+        return;
+      }
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    }, "image/png");
+  }
+
+  async function openAnn(a, rs) {
+    if (!a) return;
+    const mineOf = () => (rs.find((r) => r.message_id === a.id && r.profile_id === me.id) || {}).answer;
+    const count = (k) => rs.filter((r) => r.message_id === a.id && r.answer === k).length;
+    if (a.card) { try { await cardReady(); } catch (_) {} }
+    const d = annWhen(a);
+    sheet(KINDS[a.kind].name, `${a.card && cardAssets ? '<canvas class="gcard" aria-label="Imagen del anuncio"></canvas>' : `<div class="khero"><canvas data-art="${a.id}" aria-hidden="true"></canvas>${d ? `<span class="kdt big"><b>${dpart(d, { day: "numeric" })}</b><span>${dpart(d, { month: "long" })}<br>${dpart(d, { weekday: "long" })}</span></span>` : ""}</div>`}
+      <h2 class="kh">${esc(a.title)}</h2>
+      ${d ? `<div class="kfact">${icon("agenda")}<div><b>${esc(fmtWhen(a.event_at))}</b><span>${esc(churchShort())}</span></div></div>` : ""}
+      ${a.body ? `<div class="kbody">${esc(a.body)}</div>` : ""}
+      ${rsvpReady && d ? `<div class="krsvp" role="radiogroup" aria-label="Confirmar asistencia">${Object.entries(RSVP).map(([k, [l, i]]) => `<button role="radio" aria-checked="false" data-r="${k}">${icon(i)}${l}</button>`).join("")}</div>
+        <div class="kcount" id="kcount"></div>` : ""}
+      <button class="btn sec" id="ainv">Invitar por WhatsApp</button>`, (s) => {
+      const cv = $(".gcard", s);
+      if (cv) renderCard(cv, a.card.tpl, a.card.c); else paintArtIn(s);
+      const paint = () => {
+        const m = mineOf();
+        s.querySelectorAll("[data-r]").forEach((b) => b.setAttribute("aria-checked", b.dataset.r === m));
+        const c = $("#kcount", s);
+        if (c) c.innerHTML = `<b>${count("si")} ${count("si") === 1 ? "asistirá" : "asistirán"}</b> · ${count("tal")} ${count("tal") === 1 ? "interesado" : "interesados"}`;
+      };
+      s.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", async () => {
+        const k = b.dataset.r, prev = mineOf();
+        const i = rs.findIndex((r) => r.message_id === a.id && r.profile_id === me.id);
+        if (i >= 0) rs.splice(i, 1);
+        if (prev !== k) rs.push({ message_id: a.id, profile_id: me.id, answer: k });
+        paint();
+        const q = prev === k ? sb.from("kaleos_rsvp").delete().eq("message_id", a.id).eq("profile_id", me.id)
+          : sb.from("kaleos_rsvp").upsert({ message_id: a.id, profile_id: me.id, church_id: me.church_id, answer: k, updated_at: new Date().toISOString() }, { onConflict: "message_id,profile_id" });
+        const { error } = await q;
+        if (error) return toast(errMsg(error), 4000);
+        toast(prev === k ? "Respuesta quitada" : k === "si" ? "¡Le esperamos! Su pastor ya sabe que asistirá." : "Respuesta guardada");
+        if (tab === "tarjeta") go("tarjeta");
+      }));
+      $("#ainv", s).addEventListener("click", () => {
+        const text = `${a.title}${a.event_at ? "\n🗓️ " + fmtWhen(a.event_at) : ""}\n\nLe invito: ${churchShort()}, Iglesia de Dios E.C.`;
+        if (cv) shareCanvas(cv, text, "anuncio-kaleos.png");
+        else window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+      });
+      paint();
+    });
+  }
+
+  // ===== pastor: quién confirmó asistencia =====
+  async function rsvpTile() {
+    const { data: msgs } = await sb.from("kaleos_messages").select("id, title, event_at").eq("church_id", me.church_id).is("profile_id", null)
+      .gte("event_at", new Date(Date.now() - 12 * 3600000).toISOString()).order("event_at").limit(6);
+    if (!msgs || !msgs.length) return { html: "", bind: () => {} };
+    const { data: rs, error } = await sb.from("kaleos_rsvp").select("message_id, answer, who:kaleos_profiles!profile_id(full_name)").in("message_id", msgs.map((m) => m.id));
+    if (error) return { html: "", bind: () => {} };
+    const of = (id, k) => (rs || []).filter((r) => r.message_id === id && r.answer === k);
+    return {
+      html: `<div class="tile"><div class="lab c">Asistencia confirmada</div>${msgs.map((m) => `<div class="row"><span class="grow">${esc(m.title)} · ${esc(fmtWhen(m.event_at))}</span>
+        <button class="pill g" data-rsvp="${m.id}">${of(m.id, "si").length} ${of(m.id, "si").length === 1 ? "asistirá" : "asistirán"}</button></div>`).join("")}</div>`,
+      bind: (el) => el.querySelectorAll("[data-rsvp]").forEach((b) => b.addEventListener("click", () => {
+        const m = msgs.find((x) => String(x.id) === b.dataset.rsvp);
+        const block = (k, l) => { const arr = of(m.id, k); return `<div class="small">${l} (${arr.length})</div><div class="list">${arr.length ? arr.map((r) => `<div class="item" style="cursor:default"><div class="avatar sm">${esc(initials(r.who && r.who.full_name))}</div><div class="grow"><b>${esc(r.who ? r.who.full_name : "")}</b></div></div>`).join("") : '<div class="empty">Nadie aún.</div>'}</div>`; };
+        sheet(m.title, `<div class="small">${esc(fmtWhen(m.event_at))}</div>${block("si", "Asistirán")}${block("tal", "Les interesa")}${block("no", "No podrán")}`);
+      })),
+    };
   }
 
   // ===== hermano: tarjeta =====
@@ -519,6 +856,7 @@
     if (error) throw error;
     const month = today().slice(0, 7) + "-01";
     const { data: rep } = await sb.rpc("kaleos_month_report", { p_month: month });
+    const rt = await rsvpTile();
     const t = today().slice(5, 10);
     const list = (arr, fn, empty) => arr.length ? arr.map(fn).join("") : `<div class="empty">${empty}</div>`;
     const daysAgo = (d) => Math.round((new Date(today()) - new Date(d)) / 86400000);
@@ -530,6 +868,7 @@
           <button class="pill w" data-visit="${a.id}" data-name="${esc(a.name)}">Visitar</button></div>`, "Nadie lleva 3 domingos sin venir.")}
         <div class="row"><span class="grow">📥 ${p.prayers_new} ${p.prayers_new === 1 ? "pedido nuevo" : "pedidos nuevos"} de los hermanos</span><button class="pill b" id="prayers">Ver</button></div>
       </div>
+      ${rt.html}
       <div class="tile"><div class="lab f">Formar</div>
         <div class="row"><span class="grow">Listos para bautismo</span><button class="pill g" data-who="ready_baptism">${p.ready_baptism.length}</button></div>
         <div class="row"><span class="grow">Sirviendo, listos para liderar</span><button class="pill g" data-who="ready_lead">${p.ready_lead.length}</button></div>
@@ -547,6 +886,7 @@
       greetSheet({ kind: "cumple", key: "cumple", date: d, m: { id: b.id, full_name: b.name, title: b.title, phone: b.phone } });
     }));
     $("#prayers", el).addEventListener("click", () => go("pedidos"));
+    rt.bind(el);
     $("#torep", el).addEventListener("click", () => go("reporte"));
     const titles = { ready_baptism: "Listos para bautismo", ready_lead: "Listos para liderar", visitors_no_follow: "Visitantes sin seguimiento" };
     el.querySelectorAll("[data-who]").forEach((b) => b.addEventListener("click", () => {
