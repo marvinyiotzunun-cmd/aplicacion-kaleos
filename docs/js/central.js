@@ -419,4 +419,6 @@
     scrollTo(0, 0);
   }
   K.shells.central = { render };
+  // vistas de solo lectura para «Controles» del pastor
+  Object.assign(K, { viewIncome: cResumen, viewStats: cInformes, viewProjects: cProyectos });
 })();

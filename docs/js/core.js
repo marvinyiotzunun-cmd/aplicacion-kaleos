@@ -152,7 +152,8 @@
     pedir: '<path d="M2.5 13.6c2 0 3.3.8 4.5 2.2l1.4 1.6h3.8a1.5 1.5 0 0 0 0-3H9.7"/><path d="M6.6 21.2l1.1-1.3c.6-.6 1.3-.9 2.2-.9h5c1.1 0 1.9-.4 2.6-1.1l3.6-3.6a1.4 1.4 0 0 0-2-2l-3.3 2.6"/><path d="M14.3 9.6c0-2.4 1.8-3.1 1.8-5.4"/><circle class="d" cx="16.1" cy="3" r="1.15"/>',
     dar: '<ellipse cx="12" cy="17.6" rx="7" ry="2.5"/><path d="M5 17.6v1.3c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-1.3"/><path d="M12 15.1V8.4"/><path d="M12 10.9c-3 0-4.6-1.7-4.8-4.6 2.9.1 4.6 1.6 4.8 4.6zM12 9.3c.2-2.9 1.8-4.4 4.8-4.6-.1 2.9-1.8 4.5-4.8 4.6z"/><circle class="d" cx="12" cy="17.6" r="1"/>',
     camino: '<path d="M3 20.5h4.2v-4.2h4.2v-4.2h4.2V7.9h4.2"/><path d="M19.8 7.9V6.2"/><circle class="d" cx="19.8" cy="4.2" r="1.35"/>',
-    asistente: '<path d="M2.8 14.4c0 2.1 3.7 3.4 8.2 3.4 3.4 0 5.9-.9 7.4-2.4l2.9-2.7h-7.1c-2-1.5-5-1.6-7.6-1-2.1.5-3.8 1.4-3.8 2.7z"/><path d="M8.2 17.7l-.9 2.8h7.5l-.9-2.8"/><path class="df" d="M20.3 10.7c-1.3-.6-1.9-1.7-1.6-3.1.2-1 .9-1.8 1.4-2.9.6 1.1 1.5 1.9 1.5 3.3 0 1.3-.5 2.1-1.3 2.7z"/>',
+    asistente: '<rect x="7.5" y="2.8" width="9" height="18.4" rx="2.6"/><path d="M10 6.4h4M10 8.7h4M10 11h4"/><circle class="df" cx="12" cy="16.2" r="1.9"/><path d="M19.6 9.2a6.4 6.4 0 0 1 0 5.6M4.4 9.2a6.4 6.4 0 0 0 0 5.6"/>',
+    onda: '<path d="M4 10.5v3M8 7.5v9M12 4.5v15M16 7.5v9M20 10.5v3"/>',
     versiculos: '<path d="M4 5.5c2.6-.9 5.3-.7 8 .9v14c-2.7-1.6-5.4-1.8-8-.9z"/><path d="M20 5.5c-2.6-.9-5.3-.7-8 .9v14c2.7-1.6 5.4-1.8 8-.9z"/><path d="M15 9.2c1-.3 2-.3 3 0M15 12.2c1-.3 2-.3 3 0"/><circle class="d" cx="7.6" cy="10.4" r="1.2"/>',
     pedidos: '<rect x="3" y="5.5" width="18" height="13.5" rx="2.2"/><path d="M3.6 7.2l8.4 6.3 8.4-6.3"/><circle class="d" cx="12" cy="16" r="1.3"/>',
     agenda: '<path d="M4 20.2V10a8 3.6 0 0 1 16 0v10.2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4.2 11.2h15.6"/><path d="M8.5 3.2v3M15.5 3.2v3"/><circle class="d" cx="15.6" cy="16" r="1.25"/>',
@@ -560,11 +561,11 @@
   K.churchShort = () => (K.church && (K.church.short_name || K.church.name)) || "La Línea";
   const app = () => $("#app");
   K.isStaff = () => K.me && (K.me.role === "pastor" || K.me.role === "secretary");
-  K.canScan = () => K.me && ["usher", "pastor", "secretary"].includes(K.me.role);
+  K.canScan = () => K.me && ["usher", "secretary"].includes(K.me.role);
   K.modes = () => {
     const r = K.me.role, m = ["member"];
     if (r === "pastor") m.push("pastor");
-    if (r === "pastor" || r === "secretary") m.push("central");
+    if (r === "secretary") m.push("central"); // el pastor ve las cifras en «Controles»
     return m;
   };
   K.MODE_NAME = { member: "Mi app de miembro", pastor: "App del pastor", central: "Kaleos Central" };
@@ -598,6 +599,7 @@
   };
 
   K.setMode = (mode) => {
+    if (K.voiceStop) K.voiceStop();
     K.mode = mode;
     try { localStorage.setItem("kaleos-mode-" + K.me.id, mode); } catch (_) {}
     K.closeAll(true);
@@ -612,6 +614,7 @@
   K.shells = {};
   K.logout = async () => {
     if (!confirm("¿Cerrar sesión en este teléfono?")) return;
+    if (K.voiceStop) K.voiceStop();
     await K.sb.auth.signOut(); K.me = null; K.bust(); renderLogin();
   };
   // Muestra una vista asíncrona en un contenedor con aviso de carga y de error
@@ -717,7 +720,7 @@
     return "Toda la iglesia";
   };
 
-  // ===== escanear asistencia (ujier, Secretaría y pastor) =====
+  // ===== escanear asistencia (ujier y Secretaría) =====
   let stopScanner = null;
   K.stopScanner = () => { if (stopScanner) { stopScanner(); stopScanner = null; } };
   K.viewScan = async (el) => {
