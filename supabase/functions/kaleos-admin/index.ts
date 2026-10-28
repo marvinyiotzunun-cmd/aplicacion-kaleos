@@ -1,4 +1,5 @@
-// Kaleos: alta de hermanos y cambio de PIN (requiere la clave de servicio, por eso vive aquí)
+// Kaleos: alta de hermanos y cambio de PIN (requiere la clave de servicio, por eso vive aquí).
+// Lo usan el pastor y Secretaría; solo el pastor da el perfil de pastor o de Secretaría.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const cors = {
@@ -14,7 +15,8 @@ const admin = createClient(
 );
 
 const STAGES = ["visitante", "miembro", "bautizado", "grupo", "sirviendo", "lider"];
-const ROLES = ["member", "usher", "pastor"];
+const ROLES = ["member", "usher", "pastor", "secretary"];
+const LEVELS = ["adherente", "neofito", "miembro", "lider", "consejero"];
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -77,6 +79,7 @@ async function createPerson(church: any, b: any, role: string) {
     title: clean(b.title) ?? "Hno.",
     role,
     stage,
+    level: LEVELS.includes(b.level) ? b.level : "adherente",
     phone: clean(b.phone),
     birthday: clean(b.birthday),
     member_since: clean(b.member_since),
@@ -106,7 +109,7 @@ Deno.serve(async (req) => {
     const { count } = await admin.from("kaleos_profiles").select("id", { count: "exact", head: true })
       .eq("church_id", church.id).eq("role", "pastor");
     if ((count ?? 0) > 0) return json({ error: "Esta iglesia ya tiene pastor" }, 409);
-    return createPerson(church, { ...b, stage: "lider" }, "pastor");
+    return createPerson(church, { ...b, stage: "lider", level: "consejero" }, "pastor");
   }
 
   // El resto exige un pastor con sesión iniciada
@@ -114,17 +117,21 @@ Deno.serve(async (req) => {
   const { data: u } = await admin.auth.getUser(token);
   if (!u?.user) return json({ error: "Sesión no válida" }, 401);
   const { data: me } = await admin.from("kaleos_profiles").select("*").eq("id", u.user.id).single();
-  if (!me || me.role !== "pastor" || !me.active) return json({ error: "Solo el pastor" }, 403);
+  if (!me || !["pastor", "secretary"].includes(me.role) || !me.active) return json({ error: "Solo el pastor o Secretaría" }, 403);
   const { data: church } = await admin.from("kaleos_churches").select("*").eq("id", me.church_id).single();
 
   if (b.action === "create_member") {
-    const role = ROLES.includes(b.role) ? b.role : "member";
+    let role = ROLES.includes(b.role) ? b.role : "member";
+    if (me.role !== "pastor" && (role === "pastor" || role === "secretary")) role = "member";
     return createPerson(church, b, role);
   }
 
   if (b.action === "reset_pin") {
-    const { data: p } = await admin.from("kaleos_profiles").select("id, church_id, member_no").eq("id", b.profile_id).single();
+    const { data: p } = await admin.from("kaleos_profiles").select("id, church_id, member_no, role").eq("id", b.profile_id).single();
     if (!p || p.church_id !== me.church_id) return json({ error: "Hermano no encontrado" }, 404);
+    if (me.role !== "pastor" && p.id !== me.id && (p.role === "pastor" || p.role === "secretary")) {
+      return json({ error: "Solo el pastor cambia el PIN del pastor o de Secretaría" }, 403);
+    }
     const pin = newPin();
     const { error } = await admin.auth.admin.updateUserById(p.id, { password: pin });
     if (error) return json({ error: error.message }, 500);
