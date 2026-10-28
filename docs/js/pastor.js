@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const K = window.K, { esc, $, $$, ic } = K;
-  const P = (K.P = { sec: "asistente", chat: [], reqF: "todos", day: null, hq: "", hl: "todos", comm: null, ctab: "avisos",
+  const P = (K.P = { sec: "asistente", ctl: "ingresos", chat: [], reqF: "todos", day: null, hq: "", hl: "todos", comm: null, ctab: "avisos",
     studio: { v: 0, custom: false, ctext: "", cref: "", kind: "cumbres", pal: "alba", layout: "clasico", fmt: "cuadrado", firma: true, seed: 3 } });
 
   const REQ_SELECT = "id, kind, note, for_name, for_date, status, created_at, profile_id, who:kaleos_profiles!profile_id(id, full_name, title, phone, birthday)";
@@ -113,11 +113,14 @@
       </div>
       <div class="chat" id="chat" aria-live="polite"></div>
       <div class="sugg">${SUGG.map(([k, l]) => `<button class="chip" data-ask="${k}" data-q="${esc(l)}">${esc(l)}</button>`).join("")}</div>
-      <form class="askbar" id="askf"><button type="button" class="mic" id="mic" aria-label="Hablar">${ic("mic")}</button><input id="askq" placeholder="Pídale algo a Kaleos…" autocomplete="off" aria-label="Escriba su pedido"><button class="send" aria-label="Enviar">${ic("send")}</button></form>
-      <p class="fine">Responde con ChatGPT solo lo que Kaleos permite: agenda, pedidos, cumpleaños, avisos, recordatorios y versículos. Nada se envía sin su «sí».</p>`;
+      <form class="askbar" id="askf"><input id="askq" placeholder="Pregúntele a Kaleos…" autocomplete="off" aria-label="Escriba su pedido"><button type="button" class="dict" id="mic" aria-label="Dictar">${ic("mic")}</button><button type="button" class="voice" id="voz" aria-label="Conversar por voz">${ic("onda")}</button><button class="send" aria-label="Enviar" hidden>${ic("send")}</button></form>
+      <p class="fine">Toque ${ic("onda", "xs")} para conversar con Kaleos por voz. Solo hace lo que la app permite, y nada se envía sin su «sí».</p>`;
     drawChat(el);
     K.on(el, ".brief [data-ask], .sugg [data-ask]", (b) => ask(el, b.dataset.q, b.dataset.ask));
-    $("#askf", el).addEventListener("submit", (e) => { e.preventDefault(); const v = $("#askq", el).value.trim(); if (v) { $("#askq", el).value = ""; ask(el, v); } });
+    const q = $("#askq", el), sendB = $("#askf .send", el), vozB = $("#voz", el);
+    q.addEventListener("input", () => { const t = !!q.value.trim(); sendB.hidden = !t; vozB.hidden = t; });
+    vozB.addEventListener("click", () => K.voiceStart());
+    $("#askf", el).addEventListener("submit", (e) => { e.preventDefault(); const v = $("#askq", el).value.trim(); if (v) { q.value = ""; q.dispatchEvent(new Event("input")); ask(el, v); } });
     $("#mic", el).addEventListener("click", () => {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return K.toast("Este navegador no permite dictar. Escriba su pedido.");
@@ -338,13 +341,22 @@
     });
   }
 
-  // ===== Mayordomía (solo ver) =====
+  // ===== Mayordomía: el pastor también da (sin diezmo) =====
   async function viewMayordomia(el) {
-    const [k, funds] = await Promise.all([K.giftKpis(), K.funds()]);
-    el.innerHTML = `<div class="sec-h"><h2>Mayordomía</h2><span class="pill">${esc(K.cap(K.MONTHS[+K.today().slice(5, 7) - 1]))}</span></div>
-      <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${K.kpiCards(k)}</div>
-      ${funds.filter((f) => f.kind === "proyecto" && f.active).map((f) => K.projCard(f)).join("")}
-      <p class="fine">Usted lo ve; lo registra Secretaría en Kaleos Central.</p>`;
+    await K.viewDar(el);
+    el.insertAdjacentHTML("beforeend", `<p class="fine">Su diezmo se entrega a la oficina territorial. Las cifras de la iglesia están en «Controles».</p>`);
+  }
+
+  // ===== Controles: solo ver lo que Secretaría registra en la Central =====
+  const CTL = [["ingresos", "Ingresos", "viewIncome"], ["estadisticas", "Estadísticas", "viewStats"], ["proyectos", "Proyectos", "viewProjects"]];
+  async function viewControles(el) {
+    if (!CTL.some(([v]) => v === P.ctl)) P.ctl = "ingresos";
+    el.innerHTML = `<div class="sec-h"><h2>Controles</h2><span class="pill">${esc(K.cap(K.MONTHS[+K.today().slice(5, 7) - 1]))}</span></div>
+      <div class="tabs" role="tablist">${CTL.map(([v, l]) => `<button role="tab" aria-selected="${P.ctl === v}" data-ctl="${v}">${l}</button>`).join("")}</div>
+      <div id="ctlb" class="stack ctl-view"></div>
+      <p class="fine">Solo para ver. Los datos los registra Secretaría en Kaleos Central.</p>`;
+    K.on(el, "[data-ctl]", (b) => { P.ctl = b.dataset.ctl; K.mount(el, viewControles); });
+    K.mount($("#ctlb", el), K[CTL.find(([v]) => v === P.ctl)[2]]);
   }
 
   // ===== Iglesia (datos y aviso de la semana) =====
@@ -394,24 +406,27 @@
     ["hermanos", "Hermanos", "hermanos", () => "Bitácora y niveles"],
     ["comunidades", "Comunidades", "comunidades", () => "Avisos y orientaciones"],
     ["saludos", "Saludos", "saludos", () => "Tarjetas de cumpleaños y aniversarios"],
-    ["mayordomia", "Mayordomía", "dar", () => "Resumen del mes"],
-    ["escanear", "Escanear", "escanear", () => "Registrar asistencia"],
+    ["mayordomia", "Mayordomía", "dar", () => "Ofrendar, donar y proyectos"],
+    ["controles", "Controles", "informes", () => "Estadísticas, ingresos y proyectos"],
     ["reporte", "Reporte", "reporte", () => "Reporte ministerial del mes"],
     ["iglesia", "Iglesia", "iglesia", () => "Aviso de la semana y datos"],
   ];
   const VIEWS = { asistente: viewAsistente, versiculos: viewVersiculos, pedidos: viewPedidos, agenda: viewAgenda, hermanos: viewHermanos,
-    comunidades: (el) => K.viewComms(el, true, P), saludos: K.viewGreetings, mayordomia: viewMayordomia, escanear: K.viewScan, reporte: K.viewReport, iglesia: viewIglesia };
+    comunidades: (el) => K.viewComms(el, true, P), saludos: K.viewGreetings, mayordomia: viewMayordomia, controles: viewControles, reporte: K.viewReport, iglesia: viewIglesia };
   function header() {
     return K.dd("psec", { cls: "secdd", icon: SECS.find((s) => s[0] === P.sec)[2], options: () => SECS.map(([v, l, i, s]) => ({ v, l, icon: i, s: s() })), value: () => P.sec, pick: (v) => setSec(v) }) +
       `<span style="margin-left:auto"></span>${K.userMenu()}`;
   }
   function setSec(v) {
-    K.stopScanner();
+    if (!VIEWS[v]) return;
     if (v === "comunidades") P.comm = null;
     P.sec = v; $("#ph").innerHTML = header();
     K.mount($("#pm"), VIEWS[v]); scrollTo(0, 0);
   }
   K.pastorGo = setSec;
+  K.pastorSecs = SECS.map(([v, l]) => [v, l]);
+  // lo que usa la conversación por voz (voz.js)
+  K.pastorData = { requests, upcoming, reminders, bdaysWithin, age, ask: (text) => { const el = $("#pm"); if (P.sec === "asistente" && el) return ask(el, text); } };
   K.shells.pastor = {
     render(app) {
       if (!VIEWS[P.sec]) P.sec = "asistente";

@@ -522,7 +522,6 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 @media print{.ah,.tb,.noprint{display:none!important}.phone{box-shadow:none;border:0}}
 .mc-qr .qr{width:46%;aspect-ratio:1;background:var(--card-ink);border-radius:10px;padding:6px}
 .mc-qr .qr svg{width:100%;height:100%;display:block}
-.askbar .mic.on{background:var(--wine);color:#fff}
 .side .modes{display:flex;justify-content:flex-start}
 .tbl select.inp:disabled,.inp:disabled{opacity:.6}
 .side .modes .dd-menu{top:auto;bottom:calc(100% + 8px)}
@@ -533,3 +532,43 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 @keyframes ddin{from{opacity:0;transform:translateY(-6px) scale(.98)}}
 a.btn{text-decoration:none}
 a.li{text-decoration:none;color:inherit}
+
+/* asistente: barra estilo chat y conversación por voz */
+.askbar .dict{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--ink-2)}
+.askbar .dict.on{background:var(--wine);color:#fff}
+.askbar .voice{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--surface)}
+.askbar .voice:active{transform:scale(.94)}
+.askbar [hidden]{display:none}
+.fine .ic.xs{vertical-align:-2px}
+.voz{--lv:0;position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:calc(18px + env(safe-area-inset-top,0px)) 24px calc(28px + env(safe-area-inset-bottom,0px));
+  background:radial-gradient(120% 80% at 50% 30%,var(--night-2),var(--night) 70%);color:var(--card-ink);opacity:0;transition:opacity .25s,inset .3s,border-radius .3s}
+.voz.in{opacity:1}
+.voz-top{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:18px;right:18px;display:flex;align-items:center;justify-content:space-between}
+.voz-top .eyebrow{color:var(--foil-2)}
+.voz-top .iconbtn{width:auto;padding:0 12px;gap:6px;display:flex;align-items:center;color:var(--card-ink);border:1px solid var(--gold-line);border-radius:99px;font-size:13px;font-weight:600;height:34px}
+.orb{position:relative;width:min(56vw,230px);aspect-ratio:1;border-radius:50%;display:block;
+  background:radial-gradient(circle at 34% 30%,#FFF6DA 0,var(--foil-2) 18%,var(--foil-3) 46%,var(--wine) 78%,var(--night-2) 100%);
+  box-shadow:0 0 calc(30px + 70px*var(--lv)) rgba(243,220,155,.35),inset -14px -18px 40px rgba(17,22,46,.55);
+  transform:scale(calc(.94 + .16*var(--lv)));transition:transform .08s linear}
+.orb i{position:absolute;inset:-6%;border-radius:50%;border:1px solid var(--gold-line);opacity:0}
+.voz[data-state="listen"] .orb i{animation:ring 2.4s ease-out infinite}
+.voz[data-state="listen"] .orb i:nth-child(2){animation-delay:.8s}
+.voz[data-state="listen"] .orb i:nth-child(3){animation-delay:1.6s}
+.voz[data-state="think"] .orb{animation:think 1.4s ease-in-out infinite}
+@keyframes ring{from{opacity:.8;transform:scale(1)}to{opacity:0;transform:scale(1.5)}}
+@keyframes think{50%{filter:brightness(1.25) saturate(1.2);transform:scale(.9)}}
+.voz-st{font:500 30px/1.05 var(--f-disp);text-align:center}
+.voz-cap{min-height:3.2em;max-width:420px;text-align:center;color:color-mix(in srgb,var(--card-ink) 72%,transparent);font-size:15px;line-height:1.45}
+.voz-acts{display:flex;gap:22px}
+.vbtn{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.1);color:var(--card-ink);border:1px solid var(--gold-line)}
+.vbtn .ic .d{fill:var(--foil-2)}
+.vbtn[aria-pressed="true"]{background:var(--card-ink);color:var(--night)}
+.vbtn.end{background:var(--wine);border-color:transparent;color:#fff}
+.voz.min{inset:calc(10px + env(safe-area-inset-top,0px)) max(70px,calc(50vw - 190px)) auto auto;width:auto;height:auto;flex-direction:row;gap:8px;padding:5px;border-radius:99px;box-shadow:var(--shadow);z-index:100}
+.voz.min .voz-top,.voz.min .voz-st,.voz.min .voz-cap,.voz.min #vmute{display:none}
+.voz.min .orb{width:38px}
+.voz.min .orb i{display:none}
+.voz.min .vbtn{width:38px;height:38px}
+.voz.min .vbtn .ic{width:18px;height:18px}
+.ctl-view .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ctl-view .panels,.ctl-view .pgrid{grid-template-columns:minmax(0,1fr)}

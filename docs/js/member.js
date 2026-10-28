@@ -306,10 +306,13 @@
   K.projCard = (f, btn) => `<div class="proj"><span class="thumb" style="aspect-ratio:2.4;border-radius:14px">${K.artCv(f.style, f.palette, f.id + 30)}</span>
     <span class="eyebrow">${esc(f.subtitle || "Proyecto")}${f.until_label ? " · hasta " + esc(f.until_label) : ""}</span><h3>${esc(f.name)}</h3><div class="bar"><i style="width:${K.pct(f.got, f.goal)}%"></i></div>
     <div class="amts"><span><b class="num">${K.Q(f.got)}</b> de ${K.Q(f.goal)}</span><span class="num">${K.pct(f.got, f.goal)} %</span></div>${btn || ""}</div>`;
+  K.viewDar = viewDar;
   async function viewDar(el) {
     const [funds, gifts] = await Promise.all([K.funds(), K.rows(K.sb.from("kaleos_gifts").select("*").eq("profile_id", K.me.id).order("created_at", { ascending: false }).limit(20))]);
     const projects = funds.filter((f) => f.kind === "proyecto" && f.active), needs = funds.filter((f) => f.kind === "necesidad" && f.active);
-    const tabs = [["proyectos", "Proyectos"], ["donaciones", "Donaciones"], ["ofrendas", "Ofrendas"], ["diezmos", "Diezmos"]];
+    // el diezmo del pastor va a la oficina territorial, no a la iglesia local
+    const tabs = [["proyectos", "Proyectos"], ["donaciones", "Donaciones"], ["ofrendas", "Ofrendas"], ...(K.me.role === "pastor" ? [] : [["diezmos", "Diezmos"]])];
+    if (!tabs.some(([v]) => v === M.giveTab)) M.giveTab = "proyectos";
     let body = "";
     if (M.giveTab === "proyectos") body = projects.length ? projects.map((p) => K.projCard(p, `<button class="btn sec" data-give="proyecto|${p.id}">${ic("dar")}Aportar</button>`)).join("") : '<p class="muted">No hay proyectos abiertos.</p>';
     else if (M.giveTab === "donaciones") body = `<p class="muted">Gastos fijos que la iglesia cubre cada mes.</p><div class="list">${needs.map((n) => `<div class="need">${ic(n.emblem || "dar", "lg")}<div><b>${esc(n.name)}</b><span class="muted" style="display:block;font-size:13px">${esc(n.subtitle || "")}</span><div class="bar" style="margin-top:8px"><i style="width:${K.pct(n.got, n.goal)}%"></i></div></div><button class="btn sec sm" data-give="donacion|${n.id}">Donar</button></div>`).join("") || '<p class="muted">Sin necesidades registradas.</p>'}</div>`;
