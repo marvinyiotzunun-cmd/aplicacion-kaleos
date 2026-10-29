@@ -96,7 +96,7 @@
   function drawChat(el) {
     const box = $("#chat", el); if (!box) return;
     box.innerHTML = P.chat.map((m, i) => m.who === "me" ? `<div class="msg me">${m.html}</div>` :
-      `<div class="msg k" data-mi="${i}"><span class="who">${ic("asistente")}</span><div class="body">${m.typing ? '<span class="typing"><i></i><i></i><i></i></span>' : m.html}</div></div>`).join("") + '<span id="chatEnd"></span>';
+      `<div class="msg k" data-mi="${i}"><span class="who">${K.orbMark()}</span><div class="body">${m.typing ? '<span class="typing"><i></i><i></i><i></i></span>' : m.html}</div></div>`).join("") + '<span id="chatEnd"></span>';
     K.paint(box);
     requestAnimationFrame(() => { const c = $("#chatEnd", el); if (c) c.scrollIntoView({ block: "center", behavior: "smooth" }); });
   }
@@ -113,8 +113,8 @@
       </div>
       <div class="chat" id="chat" aria-live="polite"></div>
       <div class="sugg">${SUGG.map(([k, l]) => `<button class="chip" data-ask="${k}" data-q="${esc(l)}">${esc(l)}</button>`).join("")}</div>
-      <form class="askbar" id="askf"><input id="askq" placeholder="Pregúntele a Kaleos…" autocomplete="off" aria-label="Escriba su pedido"><button type="button" class="dict" id="mic" aria-label="Dictar">${ic("mic")}</button><button type="button" class="voice" id="voz" aria-label="Conversar por voz">${ic("onda")}</button><button class="send" aria-label="Enviar" hidden>${ic("send")}</button></form>
-      <p class="fine">Toque ${ic("onda", "xs")} para conversar con Kaleos por voz. Solo hace lo que la app permite, y nada se envía sin su «sí».</p>`;
+      <form class="askbar" id="askf"><input id="askq" placeholder="Pregúntele a Kaleos…" autocomplete="off" aria-label="Escriba su pedido"><button type="button" class="dict" id="mic" aria-label="Dictar">${ic("mic")}</button><button type="button" class="voice" id="voz" aria-label="Conversar por voz">${K.orbMark()}</button><button class="send" aria-label="Enviar" hidden>${ic("send")}</button></form>
+      <p class="fine">Toque la esfera para conversar con Kaleos por voz. Solo hace lo que la app permite, y nada se envía sin su «sí».</p>`;
     drawChat(el);
     K.on(el, ".brief [data-ask], .sugg [data-ask]", (b) => ask(el, b.dataset.q, b.dataset.ask));
     const q = $("#askq", el), sendB = $("#askf .send", el), vozB = $("#voz", el);

@@ -402,7 +402,7 @@
     if (!secs.find((s) => s[0] === C.cs)) C.cs = secs[0][0];
     const cur = secs.find((s) => s[0] === C.cs);
     app.innerHTML = `<div class="desk">
-      <aside class="side"><div class="wm row" style="gap:8px">${ic("kaleos")}<div><b>Kaleos</b><span>Central</span></div></div>
+      <aside class="side"><div class="wm row" style="gap:10px">${K.orbMark()}<div><b>Kaleos</b><span>Central</span></div></div>
         ${seg()}
         <nav aria-label="Secciones"><span class="eyebrow">${C.view === "secretaria" ? "Secretaría" : "Mayordomía"}</span>${secs.map(([k, l, i]) => `<button class="nv" data-cs="${k}" aria-current="${C.cs === k ? "page" : "false"}">${ic(i)}${l}</button>`).join("")}</nav>
         <div class="duty" style="margin-top:auto"><span class="eyebrow">En Central</span><b style="margin-top:6px">${esc(`${K.me.title || ""} ${K.me.full_name}`.trim())}</b><span class="muted" style="font-size:12.5px">${K.me.role === "pastor" ? "Pastor" : "Secretaría y tesorería"}</span></div>
