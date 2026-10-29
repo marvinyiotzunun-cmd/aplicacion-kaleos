@@ -161,7 +161,7 @@
       <div class="mc-in">
         <div class="mc-f"><canvas data-guil aria-hidden="true"></canvas>
           <div class="mc-c">
-            <div class="mc-top"><div><div class="eyebrow">Iglesia de Dios E.C.</div><div class="eyebrow" style="margin-top:3px">${esc(K.churchShort())}</div></div>${ic("kaleos", "mc-k")}</div>
+            <div class="mc-top"><div><div class="eyebrow">Iglesia de Dios E.C.</div><div class="eyebrow" style="margin-top:3px">${esc(K.churchShort())}</div></div>${K.orbMark("mc-k")}</div>
             <div class="mc-name foil">${esc(me.full_name)}</div>
             <div class="mc-row">
               <div class="mc-lv"><span class="lbl">${me.role === "member" ? "Nivel" : esc(K.ROLE_NAME[me.role])}</span><i>${esc((K.LV[me.level] || K.LV.adherente).n)}</i><div class="ladder">${K.LEVELS.map((_, i) => `<span class="${i <= li ? "on" : ""}"></span>`).join("")}</div></div>
@@ -400,7 +400,7 @@
         ...(K.church.whatsapp_url ? [{ v: "wa", l: "Comunidad de WhatsApp", s: "La comunidad de toda la iglesia", icon: "chat", go: () => window.open(K.church.whatsapp_url, "_blank", "noopener") }] : [])];
       if (!VIEWS[M.tab]) M.tab = "inicio";
       app.innerHTML = `<div class="phone">
-        <header class="ah"><div class="wm">${ic("kaleos")}<b>Kaleos</b></div>${K.userMenu(extra)}</header>
+        <header class="ah"><div class="wm">${K.orbMark()}<b>Kaleos</b></div>${K.userMenu(extra)}</header>
         <main class="main" id="mm"></main>
         <nav class="tb" style="--n:5" aria-label="Secciones">${TABS.map(([k, l, i]) => `<button data-mt="${k}" aria-current="${M.tab === k ? "page" : "false"}">${ic(i)}${l}</button>`).join("")}</nav>
       </div>`;

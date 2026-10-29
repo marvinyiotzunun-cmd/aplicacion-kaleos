@@ -146,7 +146,7 @@
 
   // ===== íconos dibujados para Kaleos =====
   const I = (K.ICONS = {
-    kaleos: '<path d="M6.5 3.5v17"/><path d="M17 3.5c-4.2 3-6.4 5.6-6.4 8.5s2.2 5.5 6.4 8.5"/><path d="M20 8.2c-1.3 1-2 2.3-2 3.8s.7 2.8 2 3.8" opacity=".55"/><circle class="d" cx="13.2" cy="12" r="1.25"/>',
+    kaleos: '<circle cx="12" cy="12" r="9.5"/><path d="M9.6 6.6v10.8"/><path d="M9.9 12.6l5.2-5"/><path d="M10.9 11.6l4.6 5.6"/><circle class="d" cx="15.4" cy="7.3" r="1.1"/>',
     inicio: '<path d="M5 21V10.5a7 7 0 0 1 14 0V21"/><path d="M9.6 21v-5.6a2.4 2.4 0 0 1 4.8 0V21"/><path d="M3 21h18"/><circle class="d" cx="12" cy="8" r="1.15"/>',
     comunidades: '<circle cx="12" cy="6.4" r="2.3"/><circle cx="5.9" cy="12.8" r="2.3"/><circle cx="18.1" cy="12.8" r="2.3"/><path d="M10.4 8.2 7.6 10.9M13.6 8.2l2.8 2.7M8.4 13.5h7.2"/><path d="M2.8 20.5c.6-2.3 1.7-3.4 3.1-3.4s2.5 1.1 3.1 3.4M15 20.5c.6-2.3 1.7-3.4 3.1-3.4s2.5 1.1 3.1 3.4"/><circle class="d" cx="12" cy="18.6" r="1.15"/>',
     pedir: '<path d="M2.5 13.6c2 0 3.3.8 4.5 2.2l1.4 1.6h3.8a1.5 1.5 0 0 0 0-3H9.7"/><path d="M6.6 21.2l1.1-1.3c.6-.6 1.3-.9 2.2-.9h5c1.1 0 1.9-.4 2.6-1.1l3.6-3.6a1.4 1.4 0 0 0-2-2l-3.3 2.6"/><path d="M14.3 9.6c0-2.4 1.8-3.1 1.8-5.4"/><circle class="d" cx="16.1" cy="3" r="1.15"/>',
@@ -202,6 +202,8 @@
     c_alabanza: '<path d="M6.8 3.8c-2 2.1-2.5 5.1-1.5 8.1.9 2.6 2.6 4.6 6.7 5.6 4.1-1 5.8-3 6.7-5.6 1-3 .5-6-1.5-8.1"/><path d="M7.4 17.4h9.2M12 17.5V21M9 21h6"/><path d="M9.4 7.6v7.8M12 6.6v9.2M14.6 7.6v7.8"/><circle class="d" cx="12" cy="4" r="1.1"/>',
     c_danza: '<path d="M3.5 18.5c3-6.2 7 2 10-4.2s4-9 7-8.1"/><path d="M3.5 18.5c1 2 3.1 2.6 5.2 1.6"/><circle class="d" cx="20.5" cy="6.2" r="1.1"/>',
   });
+  // La esfera de Kaleos (logo) en pequeño, para encabezados y la tarjeta
+  K.orbMark = (c = "") => `<img class="orbmk ${c}" src="./img/orb-128.png" alt="" aria-hidden="true">`;
   K.ic = (n, c = "") => `<svg class="ic ${c}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || I.comunidades}</svg>`;
   const ic = K.ic;
   K.EMBLEMS = ["comunidades", "c_emergente", "c_diaconos", "c_plata", "c_damas", "c_caballeros", "c_infantil", "c_misiones", "c_multimedia", "c_alabanza", "c_danza", "proyecto", "felicitacion", "oracion", "iglesia"];
@@ -647,7 +649,7 @@
   // ===== inicio de sesión =====
   function renderLogin(msg) {
     app().innerHTML = `<div class="splash">
-      <svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" aria-hidden="true">${I.kaleos}</svg>
+      <img class="mk" src="./img/orb-512.png" alt="" aria-hidden="true">
       <h1>Kaleos</h1><div class="rule"></div>
       <div class="org">Iglesia de Dios E.C.</div><div class="org thin">La Línea</div>
       <form class="login" id="f" autocomplete="on">
@@ -671,7 +673,7 @@
 
   function renderSetup() {
     app().innerHTML = `<div class="splash">
-      <svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">${I.kaleos}</svg>
+      <img class="mk" src="./img/orb-512.png" alt="" aria-hidden="true">
       <h1>Kaleos</h1><div class="rule"></div><div class="org">Instalación · primer pastor</div>
       <form class="login" id="f">
         <div class="field"><label for="k">Clave de instalación</label><input class="inp" id="k" required autocomplete="off"></div>

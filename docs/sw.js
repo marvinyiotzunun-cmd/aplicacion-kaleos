@@ -1,7 +1,7 @@
 // Guarda la app para que abra rápido y sin señal (los datos siempre vienen de la red)
-const CACHE = "kaleos-v8";
+const CACHE = "kaleos-v9";
 const SHELL = ["./", "./index.html", "./styles.css", "./js/core.js", "./js/cards.js", "./js/member.js", "./js/pastor.js", "./js/central.js", "./js/voz.js", "./vendor/supabase.js", "./vendor/qrcode.js",
-  "./vendor/jsQR.js", "./img/logo.png", "./img/mark.png", "./img/mark-w.png", "./img/icon-192.png"];
+  "./vendor/jsQR.js", "./img/logo.png", "./img/mark.png", "./img/mark-w.png", "./img/icon-192.png", "./img/orb-128.png", "./img/orb-512.png", "./img/favicon-32.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
