@@ -1,1 +1,14 @@
-[]
+[
+  {"id":"adoracion-ante-la-cruz","src":"adoracion-ante-la-cruz.jpg","name":"Adoración ante la cruz"},
+  {"id":"altar-cruz-iluminada","src":"altar-cruz-iluminada.jpg","name":"Altar con la cruz iluminada"},
+  {"id":"cruz-de-madera","src":"cruz-de-madera.jpg","name":"Cruz de madera"},
+  {"id":"pulpito-y-escenario","src":"pulpito-y-escenario.jpg","name":"Púlpito y escenario"},
+  {"id":"templo-escenario","src":"templo-escenario.jpg","name":"Escenario del templo"},
+  {"id":"templo-sillas-vacias","src":"templo-sillas-vacias.jpg","name":"Templo antes del culto"},
+  {"id":"congregacion-de-espaldas","src":"congregacion-de-espaldas.jpg","name":"Congregación en el culto"},
+  {"id":"congregacion-en-culto","src":"congregacion-en-culto.jpg","name":"Congregación de pie"},
+  {"id":"congregacion-orando","src":"congregacion-orando.jpg","name":"Congregación en oración"},
+  {"id":"canasta-de-pan","src":"canasta-de-pan.jpg","name":"Pan y uvas de la Santa Cena"},
+  {"id":"santa-cena-pan","src":"santa-cena-pan.jpg","name":"Mesa de la Santa Cena"},
+  {"id":"banderas-de-las-naciones","src":"banderas-de-las-naciones.jpg","name":"Banderas de las naciones"}
+]
