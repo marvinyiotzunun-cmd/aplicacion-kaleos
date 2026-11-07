@@ -14,6 +14,11 @@ App de cuidado pastoral de la **Iglesia de Dios Evangelio Completo de La Línea*
 - Con capturas: `SHOTS=1 node tests/e2e.js` (quedan en `tests/shots/`).
 - Necesita Node 18+ y Playwright (`npm i -D playwright && npx playwright install chromium`).
 
+## Asistente y diseños
+- `docs/js/cerebro.js`: el asistente entiende sin internet fechas («el sábado a las 7», «el 15 de noviembre»), horas, nombres de hermanos, comunidades, citas bíblicas y temas («un versículo de paz»). Con la clave de OpenAI, ChatGPT elige de la misma lista de acciones (`supabase/functions/kaleos-asistente`).
+- `docs/js/iglesia.js`: lo que Kaleos sabe de La Línea (lema, reuniones fijas, calendario, tema del mes, saludo del pastor y reglas). Las fechas de la Semana de Oración, Misiones y Discipulado se calculan solas. Edite aquí los horarios cuando cambien.
+- Diseños: 13 fondos × 17 colores × 5 composiciones = 1.105 por tipo (versículos, avisos y tarjetas), más 6 tarjetas clásicas (Azul y Rosa como las de La Línea).
+
 ## Roles
 - **Miembro**: ve su tarjeta, sus mensajes del pastor, su camino, el reverso y pide oración.
 - **Pastor**: asistente, versículos, pedidos, agenda, hermanos, comunidades, saludos, mayordomía (para dar), controles de solo lectura, reporte y datos de la iglesia.

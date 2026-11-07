@@ -11,19 +11,47 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-const ACTIONS = ["hoy", "cumple", "pedidos", "aviso", "recordatorio", "versiculo", "responder"];
+// Lo que el asistente sabe de La Línea (de su Facebook y su grupo de WhatsApp; igual que docs/js/iglesia.js)
+const IGLESIA = `Iglesia de Dios E.C. "La Línea", 0 calle 4-08, La Línea Zona 6, Quetzaltenango (Región 4, Distrito Quetzaltenango No. 2).
+Lema: «¡Proclamar las buenas nuevas de salvación! ¡Cristo es el Señor!». Lema de la denominación: «¡Adelante Iglesia de Dios!».
+Reuniones: culto dominical (hora por confirmar); Culto de Misiones el último domingo del mes; Semana de Oración y clamor la primera semana de cada mes, lunes a viernes 7:00 p. m.;
+Discipulado infantil martes 7:00 p. m.; Discipulado cristiano jueves 6:30 p. m.; Servicio de jóvenes sábado 6:00 p. m.
+Fechas: 13 abr aniversario de la Iglesia de Dios en Guatemala; 15 ago Noche de fogata; 19 ago aniversario de la Iglesia de Dios; fin de agosto Día de la Biblia y Reconocimiento Pastoral;
+13-15 sep Mañana Nacionalista; 1 oct Día del Niño; 31 oct Reforma Protestante; noviembre Clausura del Discipulado. Campaña: proyecto misionero Cartagena (Colombia).
+Tema de noviembre 2026: «No se turbe vuestro corazón» (Juan 14:1).
+Saludo del pastor cada mañana: «Que la gracia y la paz de nuestro Señor Jesucristo estén siempre con ustedes amados hermanos. ¡Buenos días!»
+Tono del pastor en WhatsApp: cercano, en primera persona, con exclamaciones («¡Les esperamos!», «Cordialmente invitados», «Sigamos adelante»), trata de Hno./Hna., «con usted y familia», sin emojis en avisos y sin firma.
+Reglas: versículos siempre Reina-Valera 1960 («texto» Libro cap:vers); niños nunca en primer plano; salud y ofrendas con nombre solo en privado, nunca al grupo de toda la iglesia.`;
 
-const SYSTEM = `Eres el asistente de Kaleos, la app pastoral de una iglesia evangélica en Guatemala.
-Hablas en español sencillo y respetuoso, de "usted", en frases cortas.
-Solo puedes elegir UNA de estas acciones (no inventes otras):
-- "hoy": resumir la agenda del día (actividades, cumpleaños, pedidos).
-- "cumple": mostrar quién cumple años para preparar tarjetas.
-- "pedidos": mostrar pedidos pendientes (oración, visita, felicitación).
-- "aviso": preparar un aviso o invitación para la iglesia o una comunidad. Llena args.title, args.body, args.when (ISO, hora de Guatemala, si la dice), args.place y args.community (slug, solo de la lista dada).
-- "recordatorio": guardar un recordatorio privado del pastor. Llena args.title y args.when (ISO).
-- "versiculo": abrir el estudio para hacer una imagen con un versículo. Si el pastor nombra uno, pon args.ref y args.text (Reina-Valera 1960).
-- "responder": contestar algo con los datos dados, sin acción.
-Nunca envías nada: la app le pide confirmación al pastor. Si no sabes algo, dilo. No des consejería ni enseñanza: Kaleos es solo informativo.`;
+// La misma lista cerrada que entiende el cerebro local de la app (docs/js/cerebro.js)
+const ACTIONS = ["hoy", "cumple", "pedidos", "aviso", "recordatorio", "versiculo", "tarjeta", "buscar", "cifras", "ir", "saludo_dia", "contestar", "info", "ayuda", "responder"];
+const ESTILOS = ["cumbres", "luz", "aurora", "olas", "lienzo", "estrellas", "vitral", "trigal", "acuarela", "petalos", "cruz", "geometria", "papiro"];
+const COLORES = ["alba", "olivo", "vino", "mar", "ocaso", "oro", "cielo", "lino", "tinta", "esmeralda", "coral", "granate", "noche", "trigo", "rosa", "perla", "linea"];
+const SECCIONES = ["asistente", "versiculos", "pedidos", "agenda", "hermanos", "comunidades", "saludos", "mayordomia", "controles", "reporte", "iglesia"];
+
+const SYSTEM = `Eres el asistente de Kaleos, la app pastoral de la iglesia de abajo, en Guatemala.
+Hablas en español de Guatemala, de "usted", cálido y breve (una o dos frases).
+Elige UNA acción de esta lista (no inventes otras) y llena solo los args que apliquen; los demás van en null:
+- "hoy": agenda de un día o varios. args.dia (AAAA-MM-DD) y args.dias (1 a 7). «¿Qué tengo el sábado?» → dia del sábado, dias 1. «Agenda de la semana» → dias 7.
+- "cumple": quién cumple años. args.dias (1 hoy, 7 semana, 31 mes).
+- "pedidos": pedidos pendientes. args.tipo: oracion, visita, felicitacion u otro (o null para todos).
+- "aviso": preparar un aviso o invitación. args.title (corto, sin la fecha), args.body, args.when (ISO con -06:00, solo si dijo la hora), args.date (AAAA-MM-DD si dijo el día sin hora), args.place, args.community (slug, solo de la lista dada).
+  Si pide una reunión fija, pon args.pieza: oracion (Semana de Oración), misiones (Culto de Misiones), discipulado, infantil (Discipulado infantil), jovenes, tema (Tema del mes): la app calcula la fecha.
+- "recordatorio": recordatorio privado del pastor. args.title y args.when (ISO con -06:00; si solo dijo el día, a las 09:00).
+- "versiculo": imagen con un versículo. args.ref y args.text (Reina-Valera 1960, exacto; si no está seguro del texto, deje text en null), args.estilo, args.color, args.formato (cuadrado, post, historia = estado de WhatsApp).
+- "tarjeta": tarjeta de felicitación para un hermano. args.nombre.
+- "buscar": datos de un hermano. args.nombre y args.dato (telefono, cumple, nivel o todo).
+- "cifras": ofrendas, diezmos, donaciones y proyectos del mes.
+- "ir": abrir una sección. args.seccion.
+- "saludo_dia": el saludo de la mañana para el grupo de WhatsApp con el versículo del día.
+- "contestar": preparar una respuesta personal a un hermano. args.nombre y args.gracias (true si es para agradecer).
+- "info": datos de la iglesia. args.tema: horario (con args.reunion: dominical, misiones, oracion, infantil, discipulado, jovenes), lema, direccion, tema o calendario.
+- "ayuda": qué puede hacer el asistente.
+- "responder": contestar con los datos dados, sin acción.
+Nunca envías nada: la app le pide confirmación al pastor. Si no sabe algo, dígalo. No da consejería ni enseñanza: Kaleos es solo informativo.
+Si un aviso para toda la iglesia menciona salud u ofrendas de una persona con nombre, recuérdelo en reply (va en privado).
+
+${IGLESIA}`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -93,11 +121,20 @@ Deno.serve(async (req) => {
               reply: { type: "string" },
               args: {
                 type: "object", additionalProperties: false,
-                required: ["title", "body", "when", "place", "community", "ref", "text"],
+                required: ["title", "body", "when", "date", "place", "community", "pieza", "ref", "text", "estilo", "color", "formato", "dia", "dias", "tipo", "nombre", "dato", "seccion", "gracias", "tema", "reunion"],
                 properties: {
-                  title: { type: ["string", "null"] }, body: { type: ["string", "null"] }, when: { type: ["string", "null"] },
+                  title: { type: ["string", "null"] }, body: { type: ["string", "null"] }, when: { type: ["string", "null"] }, date: { type: ["string", "null"] },
                   place: { type: ["string", "null"] }, community: { type: ["string", "null"] },
+                  pieza: { type: ["string", "null"], enum: ["oracion", "misiones", "discipulado", "infantil", "jovenes", "tema", null] },
                   ref: { type: ["string", "null"] }, text: { type: ["string", "null"] },
+                  estilo: { type: ["string", "null"], enum: [...ESTILOS, null] }, color: { type: ["string", "null"], enum: [...COLORES, null] },
+                  formato: { type: ["string", "null"], enum: ["cuadrado", "post", "historia", null] },
+                  dia: { type: ["string", "null"] }, dias: { type: ["integer", "null"] },
+                  tipo: { type: ["string", "null"], enum: ["oracion", "visita", "felicitacion", "otro", null] },
+                  nombre: { type: ["string", "null"] }, dato: { type: ["string", "null"], enum: ["telefono", "cumple", "nivel", "todo", null] },
+                  seccion: { type: ["string", "null"], enum: [...SECCIONES, null] }, gracias: { type: ["boolean", "null"] },
+                  tema: { type: ["string", "null"], enum: ["horario", "lema", "direccion", "tema", "calendario", null] },
+                  reunion: { type: ["string", "null"], enum: ["dominical", "misiones", "oracion", "infantil", "discipulado", "jovenes", null] },
                 },
               },
             },
@@ -111,6 +148,8 @@ Deno.serve(async (req) => {
   try {
     const a = JSON.parse(out.choices[0].message.content);
     if (!ACTIONS.includes(a.action)) a.action = "responder";
+    // quita los args vacíos para que la app use sus valores por defecto
+    a.args = Object.fromEntries(Object.entries(a.args ?? {}).filter(([, v]) => v !== null && v !== ""));
     return json(a);
   } catch {
     return json({ action: "responder", reply: "No le entendí bien. ¿Me lo dice de otra forma?", args: {} });

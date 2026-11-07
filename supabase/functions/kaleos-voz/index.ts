@@ -12,6 +12,19 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
+// Lo que el asistente sabe de La Línea (de su Facebook y su grupo de WhatsApp; igual que docs/js/iglesia.js)
+const IGLESIA = `Iglesia de Dios E.C. "La Línea", 0 calle 4-08, La Línea Zona 6, Quetzaltenango (Región 4, Distrito Quetzaltenango No. 2).
+Lema: «¡Proclamar las buenas nuevas de salvación! ¡Cristo es el Señor!». Lema de la denominación: «¡Adelante Iglesia de Dios!».
+Reuniones: culto dominical (hora por confirmar); Culto de Misiones el último domingo del mes; Semana de Oración y clamor la primera semana de cada mes, lunes a viernes 7:00 p. m.;
+Discipulado infantil martes 7:00 p. m.; Discipulado cristiano jueves 6:30 p. m.; Servicio de jóvenes sábado 6:00 p. m.
+Fechas: 13 abr aniversario de la Iglesia de Dios en Guatemala; 15 ago Noche de fogata; 19 ago aniversario de la Iglesia de Dios; fin de agosto Día de la Biblia y Reconocimiento Pastoral;
+13-15 sep Mañana Nacionalista; 1 oct Día del Niño; 31 oct Reforma Protestante; noviembre Clausura del Discipulado. Campaña: proyecto misionero Cartagena (Colombia).
+Tema de noviembre 2026: «No se turbe vuestro corazón» (Juan 14:1).
+Saludo del pastor cada mañana: «Que la gracia y la paz de nuestro Señor Jesucristo estén siempre con ustedes amados hermanos. ¡Buenos días!»
+Tono del pastor en WhatsApp: cercano, en primera persona, con exclamaciones («¡Les esperamos!», «Cordialmente invitados», «Sigamos adelante»), trata de Hno./Hna., «con usted y familia», sin emojis en avisos y sin firma.
+Reglas: versículos siempre Reina-Valera 1960 («texto» Libro cap:vers); niños nunca en primer plano; salud y ofrendas con nombre solo en privado, nunca al grupo de toda la iglesia.`;
+const ESTILOS = ["cumbres", "luz", "aurora", "olas", "lienzo", "estrellas", "vitral", "trigal", "acuarela", "petalos", "cruz", "geometria", "papiro"];
+const COLORES = ["alba", "olivo", "vino", "mar", "ocaso", "oro", "cielo", "lino", "tinta", "esmeralda", "coral", "granate", "noche", "trigo", "rosa", "perla", "linea"];
 const SECCIONES = ["asistente", "versiculos", "pedidos", "agenda", "hermanos", "comunidades", "saludos", "mayordomia", "controles", "reporte", "iglesia"];
 const fn = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) =>
   ({ type: "function", name, description, parameters: { type: "object", properties, required } });
@@ -28,13 +41,17 @@ const TOOLS = [
     titulo: { type: "string" }, detalle: { type: "string" }, cuando: { type: "string", description: "ISO 8601 con zona -06:00" },
     lugar: { type: "string" }, comunidad: { type: "string", description: "slug de una comunidad de la lista, o vacío para toda la iglesia" },
   }, ["titulo"]),
-  fn("disenar_versiculo", "Diseñar en pantalla una imagen con un versículo (Reina-Valera 1960).", {
-    referencia: { type: "string" }, texto: { type: "string" },
-    estilo: { type: "string", enum: ["cumbres", "luz", "aurora", "olas", "lienzo"] },
-    color: { type: "string", enum: ["alba", "olivo", "vino", "mar", "ocaso", "oro", "cielo", "lino"] },
+  fn("disenar_versiculo", "Diseñar en pantalla una imagen con un versículo (Reina-Valera 1960). Sin texto, la app lo busca por referencia o por tema (fe, paz, fortaleza, ánimo, esperanza, gratitud, oración, familia, misiones…).", {
+    referencia: { type: "string" }, texto: { type: "string" }, tema: { type: "string" },
+    estilo: { type: "string", enum: ESTILOS }, color: { type: "string", enum: COLORES, description: "linea = azul marino y dorado de la iglesia" },
+    composicion: { type: "string", enum: ["clasico", "editorial", "monumental", "marco", "esquina"] },
     formato: { type: "string", enum: ["cuadrado", "post", "historia"], description: "historia = estado de WhatsApp" },
   }),
   fn("preparar_tarjeta", "Abrir en pantalla la tarjeta de felicitación para un hermano. El pastor la envía él mismo.", { nombre: { type: "string" } }, ["nombre"]),
+  fn("ver_iglesia", "Leer los datos de la iglesia: lema, dirección, horarios de las reuniones con su próxima fecha, tema del mes, fechas especiales y reglas."),
+  fn("preparar_pieza", "Abrir un aviso fijo de la iglesia con la fecha ya calculada.", { pieza: { type: "string", enum: ["oracion", "misiones", "discipulado", "infantil", "jovenes", "tema"] } }, ["pieza"]),
+  fn("preparar_respuesta", "Preparar en pantalla una respuesta personal a un hermano, en el tono del pastor («¡Buenos días estimada hermana…!»).", { nombre: { type: "string" }, gracias: { type: "boolean" } }, ["nombre"]),
+  fn("saludo_del_dia", "Preparar el saludo de la mañana para el grupo de WhatsApp con el versículo del día."),
 ];
 
 Deno.serve(async (req) => {
@@ -65,6 +82,7 @@ Puedes abrir secciones de la app (ir_a), leer su agenda, pedidos, cumpleaños, h
 y preparar en pantalla avisos, tarjetas e imágenes de versículos. Nada se envía solo: lo que preparas queda en pantalla y el pastor lo envía.
 Antes de guardar un recordatorio, repite qué y cuándo, y espera su "sí".
 Kaleos es solo informativo: no das consejería ni enseñanza. Las cifras las registra Secretaría; tú solo las lees.
+${IGLESIA}
 Comunidades (slug: nombre): ${(comms ?? []).map((c: any) => `${c.slug}: ${c.name}`).join("; ") || "ninguna"}.
 Secciones: ${SECCIONES.join(", ")}.`;
 

@@ -266,7 +266,7 @@ async function suites() {
     await p.waitForSelector('[data-rem="1"]'); await p.locator('[data-rem="1"]').last().click(); await p.waitForSelector("text=Guardado.");
     await p.fill("#askq", "recordatorio comprar pan"); await p.press("#askq", "Enter");
     await p.locator('[data-remedit="1"]').last().click(); await p.fill("#rt3", "15:30"); await top(p).locator("#rok").click(); await toast(p, /guardado/i);
-    await p.fill("#askq", "hola"); await p.press("#askq", "Enter"); await p.waitForSelector("text=Puedo ayudarle");
+    await p.fill("#askq", "hola"); await p.press("#askq", "Enter"); await p.waitForSelector("text=Esto puedo hacer");
     await p.locator('.msg.k [data-ann="1"]').last().click(); await p.waitForSelector(".drawer.show #at"); await closeTop(p);
     await p.locator('.msg.k [data-vers="1"]').last().click(); await p.waitForSelector(".studio");
   }, { allow: [/kaleos-asistente|non-2xx|503/] });
@@ -403,6 +403,215 @@ async function suites() {
     await p.reload(); await p.waitForSelector(".greet");
   });
 
+  console.log("\nAsistente (lo que entiende)");
+  // [frase, acción esperada, comprobaciones de los datos] — «hoy» es sábado 7 de noviembre de 2026
+  const FRASES = [
+    ["Hola", "ayuda"], ["Buenos días", "ayuda"], ["¿Qué puedes hacer?", "ayuda"], ["ayuda", "ayuda"], ["Gracias", "responder"], ["Muchas gracias, Kaleos", "responder"],
+    ["¿Qué tengo hoy?", "hoy", { dia: "2026-11-07", dias: 1 }], ["¿Qué tengo mañana?", "hoy", { dia: "2026-11-08" }], ["¿Qué hay pasado mañana?", "hoy", { dia: "2026-11-09" }],
+    ["¿Qué tengo el martes?", "hoy", { dia: "2026-11-10" }], ["agenda del miércoles", "hoy", { dia: "2026-11-11" }], ["Agenda de la semana", "hoy", { dias: 7 }],
+    ["¿Qué tengo el fin de semana?", "hoy", { dias: 2 }], ["¿Qué hay el 20 de noviembre?", "hoy", { dia: "2026-11-20" }], ["¿Tengo algo el 3 de enero?", "hoy", { dia: "2027-01-03" }],
+    ["¿Qué toca el viernes?", "hoy", { dia: "2026-11-13" }], ["el domingo", "hoy", { dia: "2026-11-08" }], ["mis pendientes de hoy", "hoy", { dia: "2026-11-07" }],
+    ["¿Quién cumple años esta semana?", "cumple", { dias: 7 }], ["¿Quién cumple este mes?", "cumple", { dias: 31 }], ["cumpleaños de hoy", "cumple", { dias: 1 }], ["cumpleaños", "cumple", { dias: 8 }],
+    ["¿Cuándo cumple Pedro?", "buscar", { dato: "cumple", who: "Pedro Ajú" }], ["Felicita a Marta", "tarjeta", { who: "Marta Xicará" }], ["Prepárale una tarjeta a Ana Lucía", "tarjeta", { who: "Ana Lucía Pérez" }],
+    ["Mándale una felicitación a la hermana Esther", "tarjeta", { who: "Esther Quiché" }], ["felicita a José Tzoc por su aniversario de bodas", "tarjeta", { who: "José Tzoc" }],
+    ["Pedidos pendientes", "pedidos", { tipo: null }], ["¿Tengo visitas pendientes?", "pedidos", { tipo: "visita" }], ["Pedidos de oración", "pedidos", { tipo: "oracion" }], ["¿Quién pidió oración?", "pedidos", { tipo: "oracion" }],
+    ["Recuérdame llamar al hermano Pedro mañana a las 10 de la mañana", "recordatorio", { title: "Llamar al hermano Pedro", when: "2026-11-08T10:00" }],
+    ["Recuérdame comprar el pan para la Santa Cena el viernes a las 5", "recordatorio", { title: "Comprar el pan para la Santa Cena", when: "2026-11-13T17:00" }],
+    ["Anota visitar a la familia Tzoc el lunes", "recordatorio", { title: "Visitar a la familia Tzoc", when: "2026-11-09T09:00" }],
+    ["recordatorio: reunión con los diáconos el 15 de noviembre a las 7:30 pm", "recordatorio", { title: "Reunión con los diáconos", when: "2026-11-15T19:30" }],
+    ["no me dejes olvidar el informe del distrito el 30/11", "recordatorio", { title: "Informe del distrito", when: "2026-11-30T09:00" }],
+    ["apúntame orar por los enfermos a las 9 de la noche", "recordatorio", { title: "Orar por los enfermos" }],
+    ["Prepara un aviso de vigilia de oración para el viernes a las 7 en el templo", "aviso", { title: "Vigilia de oración", when: "2026-11-13T19:00", place: "templo" }],
+    ["Invita a los jóvenes a la noche de fogata el sábado a las 6 de la tarde", "aviso", { title: "Noche de fogata", community: "emergente", when: "2026-11-14T18:00" }],
+    ["Haz un anuncio para las damas: reunión el martes a las 3 en el salón", "aviso", { title: "Reunión", community: "damas", when: "2026-11-10T15:00", place: "salón" }],
+    ["convoca a los diáconos a reunión mañana en la noche", "aviso", { community: "diaconos", when: "2026-11-08T19:00" }],
+    ["anuncia a toda la iglesia que el domingo hay Santa Cena", "aviso", { title: "Santa Cena", date: "2026-11-08" }],
+    ["aviso de ayuno el miércoles", "aviso", { title: "Ayuno", date: "2026-11-11" }],
+    ["Prepara la semana de oración", "aviso", { pieza: "oracion" }], ["Prepara el aviso del culto de misiones", "aviso", { pieza: "misiones" }],
+    ["Aviso de discipulado", "aviso", { pieza: "discipulado" }], ["haz el aviso del discipulado infantil", "aviso", { pieza: "infantil" }],
+    ["Aviso: el hermano Daniel está enfermo, oremos por su salud", "aviso", { warn: true }],
+    ["Hazme una imagen con Juan 3:16", "versiculo", { ref: "Juan 3:16" }], ["filipenses 4 13 en estilo cruz", "versiculo", { ref: "Filipenses 4:13", estilo: "cruz" }],
+    ["1 pedro 2:9", "versiculo", { ref: "1 Pedro 2:9" }], ["salmo 23", "versiculo", { ref: "Salmos 23:1" }], ["Versículo de fe", "versiculo", { tema: "fe" }],
+    ["Un versículo de paz en estilo vitral color esmeralda", "versiculo", { tema: "paz", estilo: "vitral", color: "esmeralda" }],
+    ["Diseña el salmo 23 para estado de WhatsApp", "versiculo", { formato: "historia" }], ["Imagen del tema del mes", "versiculo", { ref: "Juan 14:1" }],
+    ["Sorpréndeme con un versículo", "versiculo", { azar: true }], ["un versículo para los niños", "versiculo", { tema: "ninos" }], ["versículo de misiones con los colores de la iglesia", "versiculo", { tema: "misiones", color: "linea" }],
+    ["¿Cuánto llevamos de ofrendas?", "cifras"], ["¿Cómo van los proyectos?", "cifras"], ["diezmos del mes", "cifras"],
+    ["Abre la agenda", "ir", { seccion: "agenda" }], ["Ir a hermanos", "ir", { seccion: "hermanos" }], ["Muéstrame los pedidos", "ir", { seccion: "pedidos" }], ["abre saludos", "ir", { seccion: "saludos" }],
+    ["Teléfono de José Tzoc", "buscar", { dato: "telefono", who: "José Tzoc" }], ["¿Quién es Esther?", "buscar", { who: "Esther Quiché" }], ["Busca a Daniel", "buscar", { who: "Daniel Coyoy" }],
+    ["nivel de Ana Lucía", "buscar", { dato: "nivel", who: "Ana Lucía Pérez" }], ["Pedro Ajú", "buscar", { who: "Pedro Ajú" }],
+    ["Saludo de buenos días para el grupo", "saludo_dia"], ["el mensaje de la mañana", "saludo_dia"],
+    ["Responde a la hermana Ana", "contestar", { who: "Ana Lucía Pérez" }], ["Agradécele a Pedro", "contestar", { who: "Pedro Ajú", gracias: true }], ["contesta a Esther", "contestar", { who: "Esther Quiché" }],
+    ["¿A qué hora es el discipulado?", "info", { tema: "horario", reunion: "discipulado" }], ["¿Cuándo es la semana de oración?", "info", { tema: "horario", reunion: "oracion" }],
+    ["¿Qué día es el discipulado infantil?", "info", { reunion: "infantil" }], ["¿Cuál es el lema de la iglesia?", "info", { tema: "lema" }], ["¿Dónde queda la iglesia?", "info", { tema: "direccion" }],
+    ["¿Cuál es el tema del mes?", "info", { tema: "tema" }], ["¿Qué fechas especiales vienen?", "info", { tema: "calendario" }],
+    ["asdfgh", "responder"], ["", "responder"],
+  ];
+  await test(`asistente: entiende ${FRASES.length} frases (fechas, horas, nombres, comunidades, versículos)`, async (p) => {
+    await login(p, "pastor");
+    const out = await p.evaluate(async (F) => {
+      const people = await K.people(), comms = await K.communities(), bad = [];
+      const gt = (v) => new Date(v).toLocaleString("sv-SE", { timeZone: "America/Guatemala" }).slice(0, 16).replace(" ", "T");
+      for (const [f, act, want = {}] of F) {
+        const r = K.brain.understand(f, { people, comms, today: "2026-11-07", nowMin: 600 }), a = r.args || {};
+        const errs = [];
+        if (r.action !== act) errs.push(`acción ${r.action}`);
+        for (const [k, v] of Object.entries(want)) {
+          if (k === "who") { const n = (a.personas || []).map((id) => people.find((x) => x.id === id).full_name); if (n[0] !== v) errs.push(`persona ${n[0]}`); }
+          else if (k === "when") { if (!a.when || gt(a.when) !== v) errs.push(`cuando ${a.when && gt(a.when)}`); }
+          else if (k === "warn") { if (!r.warn) errs.push("sin advertencia"); }
+          else if (k === "title") { if (String(a.title || "").toLowerCase() !== v.toLowerCase()) errs.push(`título «${a.title}»`); }
+          else if (k === "place") { if (String(a.place || "").toLowerCase() !== v.toLowerCase()) errs.push(`lugar «${a.place}»`); }
+          else if ((a[k] ?? null) !== v) errs.push(`${k}=${JSON.stringify(a[k])}`);
+        }
+        if (errs.length) bad.push(`«${f}» → ${errs.join(", ")}`);
+      }
+      return bad;
+    }, FRASES);
+    assert(!out.length, `No entendió bien ${out.length}:\n    ` + out.join("\n    "));
+  });
+  await test("asistente: cada respuesta se ve y sus botones funcionan", async (p) => {
+    await login(p, "pastor");
+    const say = async (q) => { await p.fill("#askq", q); await p.press("#askq", "Enter"); await p.waitForFunction(() => !document.querySelector(".typing")); await p.waitForTimeout(60); };
+    const last = (sel) => p.locator(`.msg.k`).last().locator(sel);
+    for (const q of ["hola", "¿qué tengo mañana?", "agenda de la semana", "¿quién cumple este mes?", "pedidos de oración", "¿cuánto llevamos de ofrendas?", "¿a qué hora es el discipulado?",
+      "¿cuál es el lema de la iglesia?", "¿dónde queda la iglesia?", "¿cuál es el tema del mes?", "¿qué fechas especiales vienen?", "teléfono de José Tzoc", "asdfgh"]) {
+      await say(q);
+      const txt = await p.locator(".msg.k").last().innerText();
+      assert(txt.trim().length > 10 && !/undefined|NaN|null|\[object/.test(txt), `«${q}» respondió mal: ${txt.slice(0, 160)}`);
+    }
+    // saludo de la mañana: imagen + compartir y copiar
+    await say("saludo de buenos días para el grupo");
+    await p.waitForFunction(() => { const c = [...document.querySelectorAll(".msg.k canvas[data-vc]")].pop(); return c && c.width === 1080; });
+    await last('[data-copy="1"]').click(); await toast(p, /copiado/i);
+    await last('[data-share="1"]').click(); await p.waitForTimeout(400);
+    // contestar a una hermana en el tono del pastor
+    await say("responde a la hermana Ana");
+    const r1 = await p.locator(".msg.k").last().innerText();
+    assert(/estimada hermana Ana/.test(r1) && /con usted y familia/.test(r1), "la respuesta no tiene el tono del pastor: " + r1.slice(0, 200));
+    await say("agradécele a Pedro");
+    assert(/Muchas gracias/.test(await p.locator(".msg.k").last().innerText()), "no agradeció");
+    await last("[data-wa]").click(); assert((await p.evaluate(() => window.__opened.pop())).includes("wa.me"), "no abrió WhatsApp");
+    // buscar y abrir ficha
+    await say("¿quién es Esther?"); await last("[data-person]").click(); await p.waitForSelector(".sheet.show"); await closeTop(p);
+    // versículo con estilo y color: se ve en el chat y se abre en el estudio
+    await say("salmo 23 en estilo vitral color esmeralda para estado de whatsapp");
+    await p.waitForFunction(() => { const c = [...document.querySelectorAll(".msg.k canvas[data-vc]")].pop(); return c && c.height === 1920; });
+    assert(await p.evaluate(() => K.P.studio.kind === "vitral" && K.P.studio.pal === "esmeralda"), "no aplicó el estilo y el color");
+    await last('[data-vers="1"]').click(); await p.waitForSelector(".studio");
+    await pick(p, '[data-dd="psec"]', "asistente");
+    // versículo que no está en la biblioteca: pide el texto
+    await say("romanos 12 2"); assert(/No tengo el texto/.test(await p.locator(".msg.k").last().innerText()), "debió pedir el texto");
+    // aviso fijo con fecha calculada
+    await say("prepara la semana de oración");
+    const t2 = await p.locator(".msg.k").last().innerText();
+    assert(/Semana de Oración/.test(t2) && /lunes/i.test(t2), "la Semana de Oración no trae su fecha: " + t2.slice(0, 200));
+    await last('[data-ann="1"]').click(); await p.waitForSelector(".drawer.show #at");
+    assert((await p.inputValue("#ah")) === "19:00" && /\d{4}-\d{2}-\d{2}/.test(await p.inputValue("#ad")), "el editor no recibió fecha y hora");
+    await closeTop(p);
+    // aviso con advertencia de privacidad
+    await say("aviso: la hermana Marta está en el hospital, oremos por su salud");
+    assert(/en privado/.test(await p.locator(".msg.k").last().innerText()), "faltó la advertencia de privacidad");
+    // tarjeta para alguien sin cumpleaños registrado
+    await say("felicita a Daniel Coyoy"); await last("[data-card]").click(); await p.waitForSelector(".sheet.show canvas.gcard"); await closeTop(p);
+    // abrir una sección
+    await say("abre la agenda"); await p.waitForSelector(".tl, .agenda, [data-dd='psec']"); await p.waitForTimeout(500);
+    assert(await p.evaluate(() => K.P.sec === "agenda"), "no abrió la agenda");
+  }, { allow: [/kaleos-asistente|non-2xx|503/] });
+  await test("asistente: las reuniones fijas calculan bien su fecha", async (p) => {
+    await login(p, "pastor");
+    const r = await p.evaluate(() => ({
+      or1: K.nextMeeting("oracion", "2026-11-07").date, or2: K.nextMeeting("oracion", "2026-11-03").date, or3: K.nextMeeting("oracion", "2026-12-01").date,
+      mi1: K.nextMeeting("misiones", "2026-11-07").date, mi2: K.nextMeeting("misiones", "2026-12-28").date,
+      di1: K.nextMeeting("discipulado", "2026-11-07").date, inf: K.nextMeeting("infantil", "2026-11-07").date, jo: K.nextMeeting("jovenes", "2026-11-08").date,
+      tema: K.temaDelMes("2026-11-15"), sinTema: K.temaDelMes("2027-03-02"), fechas: K.fechasIglesia("2026-10-25", 10).map((x) => x.n),
+    }));
+    const want = { or1: "2026-12-07", or2: "2026-11-02", or3: "2026-12-07", mi1: "2026-11-29", mi2: "2027-01-31", di1: "2026-11-12", inf: "2026-11-10", jo: "2026-11-14" };
+    for (const [k, v] of Object.entries(want)) assert(r[k] === v, `${k}: ${r[k]} en vez de ${v}`);
+    assert(r.tema && r.tema.ref === "Juan 14:1" && r.sinTema === null, "tema del mes");
+    assert(r.fechas.includes("Día de la Reforma Protestante"), "faltó la Reforma Protestante en el calendario");
+  });
+
+  console.log("\nDiseños");
+  await test("diseños: los 1.105 de versículo, aviso y tarjeta se dibujan sin errores y con contenido", async (p) => {
+    await login(p, "pastor");
+    const r = await p.evaluate(async () => {
+      await K.cardReady();
+      const ks = Object.keys(K.ART_KINDS), ps = Object.keys(K.PAL), LS = Object.keys(K.LAYOUTS), AL = Object.keys(K.ANN_LAYOUTS), FR = Object.keys(K.CARD_FRAMES);
+      const c = document.createElement("canvas"), bad = [], counts = { verse: 0, ann: 0, card: 0 };
+      // ¿hay contenido? mira la variación de brillo en una franja central (texto sobre fondo)
+      const busy = () => { const x = c.getContext("2d"), d = x.getImageData(0, 0, c.width, c.height).data; let mn = 255, mx = 0; for (let i = 0; i < d.length; i += 4 * 97) { const v = (d[i] + d[i + 1] + d[i + 2]) / 3; mn = Math.min(mn, v); mx = Math.max(mx, v); } return mx - mn > 90; };
+      const fmts = ["cuadrado", "post", "historia"];
+      let n = 0;
+      for (const k of ks) for (const pl of ps) {
+        for (const l of LS) {
+          const v = K.VERSES[n % K.VERSES.length];
+          try { K.drawVerse(c, { text: v[1], ref: v[0], pal: pl, kind: k, layout: l, fmt: fmts[n % 3], firma: n % 2 === 0, seed: (n % 90) + 1 }); counts.verse++; if (!busy()) bad.push(`versículo ${k}/${pl}/${l}: sin contraste`); } catch (e) { bad.push(`versículo ${k}/${pl}/${l}: ${e.message}`); }
+          n++;
+        }
+        for (const l of AL) {
+          try { K.drawAnn(c, { id: n, title: n % 2 ? "Semana de Oración y clamor" : "Vigilia", event_at: n % 3 ? new Date(Date.now() + n * 3600000).toISOString() : null, place: n % 4 ? "Templo La Línea" : "", art: { k, p: pl, s: (n % 90) + 1, l } }); counts.ann++; if (!busy()) bad.push(`aviso ${k}/${pl}/${l}: sin contraste`); } catch (e) { bad.push(`aviso ${k}/${pl}/${l}: ${e.message}`); }
+          n++;
+        }
+        for (const f of FR) {
+          try { K.renderCard(c, K.designTpl(k, pl, f), { kicker: "7 de noviembre", headline: "¡Feliz cumpleaños!", line: "Damos gracias a Dios por su vida", name: n % 2 ? "Hna. María Fernanda López de García" : "Hno. Luis Ajú", verse: "Jehová te bendiga, y te guarde.", ref: "Números 6:24", date: "2026-11-07", signature: "Pastor Samuel", from: "y toda la familia de La Línea", church: "Iglesia de Dios E.C. · La Línea", seed: "s" + n }); counts.card++; if (!busy()) bad.push(`tarjeta ${k}/${pl}/${f}: sin contraste`); } catch (e) { bad.push(`tarjeta ${k}/${pl}/${f}: ${e.message}`); }
+          n++;
+        }
+      }
+      for (const t of Object.keys(K.TEMPLATES)) { try { K.renderCard(c, t, { kicker: "x", headline: "¡Feliz cumpleaños!", line: "y", name: "Hno. Luis", verse: "v", ref: "r", date: "2026-11-07", signature: "s", from: "f", church: "c", seed: t }); counts.card++; } catch (e) { bad.push(`clásica ${t}: ${e.message}`); } }
+      return { bad, counts, total: K.CARD_DESIGNS };
+    });
+    assert(!r.bad.length, `${r.bad.length} diseños con problemas:\n    ` + r.bad.slice(0, 15).join("\n    "));
+    assert(r.counts.verse >= 1000 && r.counts.ann >= 1000 && r.counts.card >= 1000, "menos de 1.000 diseños: " + JSON.stringify(r.counts));
+    console.log(`    dibujados: ${r.counts.verse} versículos, ${r.counts.ann} avisos, ${r.counts.card} tarjetas`);
+  }, { allow: [/willReadFrequently/] });
+  await test("diseños: tarjeta (clásicas, Azul/Rosa según el trato, 1.105 Kaleos, sorpréndame) y envío", async (p) => {
+    await login(p, "pastor");
+    await pick(p, '[data-dd="psec"]', "saludos");
+    await p.locator(".list [data-i]").first().click(); await p.waitForSelector(".sheet.show canvas.gcard");
+    const def = await p.evaluate(() => document.querySelector('.sheet.show [data-tpl].on').dataset.tpl);
+    assert(["azul", "rosa", "marfil", "noche", "olivo"].includes(def), "plantilla inicial rara: " + def);
+    for (const t of ["noche", "marfil", "fiesta", "olivo", "azul", "rosa", "design"]) await top(p).locator(`[data-tpl="${t}"]`).click();
+    assert(await top(p).locator("#dz").isVisible(), "no se ven los diseños Kaleos");
+    await top(p).locator("#dzk").selectOption("vitral"); await top(p).locator("#dzp").selectOption("linea"); await top(p).locator("#dzf").selectOption("arco");
+    for (let i = 0; i < 5; i++) await top(p).locator("#dzr").click();
+    assert(/1\.111|1,111|1 111/.test(await top(p).locator("#dz").innerText()), "no dice cuántos diseños hay");
+    const msg = await top(p).locator("#gm").inputValue();
+    assert(/con usted y familia|Bendiciones|Felicidades|aniversario/i.test(msg) && !/undefined/.test(msg), "mensaje raro: " + msg.slice(0, 120));
+    await p.waitForTimeout(1200); await top(p).locator("#go").click(); await toast(p, /Enviado/);
+    const sent = await p.evaluate(() => __MOCK.db.tables.kaleos_messages.filter((m) => m.card).pop().card.tpl);
+    assert(/^d:/.test(sent), "no guardó el diseño elegido: " + sent);
+  });
+  await test("diseños: editor de avisos (plantillas de la iglesia, 13 estilos, 5 composiciones, sorpréndame)", async (p) => {
+    await login(p, "pastor");
+    await p.evaluate(() => K.annSheet()); await p.waitForSelector(".drawer.show #at");
+    const n = await p.locator(".drawer.show [data-pc]").count();
+    assert(n >= 5, "faltan plantillas de la iglesia: " + n);
+    for (let i = 0; i < n; i++) {
+      await p.locator(".drawer.show [data-pc]").nth(i).click();
+      assert((await p.inputValue("#at")).length > 3, "la plantilla no llenó el título");
+    }
+    await p.locator('.drawer.show [data-pc]').nth(1).click();
+    for (const k of ["estrellas", "vitral", "trigal", "acuarela", "petalos", "cruz", "geometria", "papiro"]) await p.click(`.drawer.show [data-s="${k}"]`);
+    for (const l of ["centro", "cinta", "marco", "agenda", "fecha"]) await p.click(`.drawer.show [data-l="${l}"]`);
+    await p.click(".drawer.show [data-p='linea']");
+    for (let i = 0; i < 4; i++) await p.click("#arnd");
+    await noOverflow(p, "editor de avisos");
+    await p.click("#apub"); await toast(p, /Publicado/);
+    const art = await p.evaluate(() => __MOCK.db.tables.kaleos_messages.filter((m) => m.art).pop().art);
+    assert(art.l && art.k && art.p, "no guardó la composición: " + JSON.stringify(art));
+  });
+  await test("diseños: estudio de versículos con los 13 estilos, 17 colores y 5 composiciones", async (p) => {
+    await login(p, "pastor");
+    await pick(p, '[data-dd="psec"]', "versiculos");
+    const ks = await p.evaluate(() => Object.keys(K.ART_KINDS)), ps = await p.evaluate(() => Object.keys(K.PAL)), ls = await p.evaluate(() => Object.keys(K.LAYOUTS));
+    assert(ks.length === 13 && ps.length === 17 && ls.length === 5, "cantidades distintas");
+    for (const k of ks) await p.click(`[data-st="${k}"]`);
+    for (const c of ps) await p.click(`[data-sp="${c}"]`);
+    for (const l of ls) await p.click(`[data-sl="${l}"]`);
+    for (let i = 0; i < 3; i++) await p.click("#vrnd");
+    await noOverflow(p, "estudio");
+    await p.click("#vpub"); await toast(p, /Publicado/);
+  }, { mobile: true });
   console.log("\nSecretaría");
   await test("secretaría: personas (buscar, filtrar, editar, nuevo hermano)", async (p) => {
     await login(p, "secretaria");

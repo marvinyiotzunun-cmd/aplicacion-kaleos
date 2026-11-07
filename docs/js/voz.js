@@ -97,11 +97,14 @@
       K.annSheet({ prefill: { title: titulo || "", body: detalle || "", when: cuando || null, place: lugar || "", community: c ? c.id : null }, after: () => K.bust("upcoming") });
       return { ok: true, nota: "El editor del aviso quedó abierto en la pantalla; el pastor lo revisa y lo envía." };
     },
-    async disenar_versiculo({ referencia, texto, estilo, color, formato }) {
+    async disenar_versiculo({ referencia, texto, estilo, color, formato, composicion, tema }) {
       const st = K.P.studio;
+      // sin texto: búsquelo en la biblioteca por referencia o por tema
+      if (!texto && (referencia || tema)) { const v = K.brain.findVerse(K.brain.plain(`${referencia || ""} ${tema || ""}`)); if (v) { texto = v.text; referencia = v.ref; } }
       if (texto) Object.assign(st, { custom: true, ctext: texto, cref: referencia || "" });
       if (estilo && K.ART_KINDS[estilo]) st.kind = estilo;
       if (color && K.PAL[color]) st.pal = color;
+      if (composicion && K.LAYOUTS[composicion]) st.layout = composicion;
       if (formato && ["cuadrado", "post", "historia"].includes(formato)) st.fmt = formato;
       st.seed = 1 + Math.floor(Math.random() * 90);
       K.pastorGo("versiculos"); setMin(true);
@@ -111,9 +114,35 @@
       const plain = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       const q = plain(nombre), p = q && (await K.people()).find((x) => x.active && plain(x.full_name).includes(q));
       if (!p) return { error: "No encontré a ese hermano" };
-      if (!p.birthday) return { error: "Ese hermano no tiene registrada su fecha de cumpleaños" };
-      setMin(true); K.greetBirthday(p);
-      return { ok: true, nota: `La tarjeta para ${p.full_name} quedó abierta para revisarla y enviarla.` };
+      setMin(true);
+      if (p.birthday) K.greetBirthday(p); else K.greetSheet({ kind: "especial", key: "especial:bendicion", date: K.today(), m: p, label: "Bendiciones" });
+      return { ok: true, nota: `La tarjeta para ${p.full_name} quedó abierta para revisarla y enviarla. Hay ${K.CARD_DESIGNS} diseños para elegir.` };
+    },
+    async ver_iglesia() {
+      const I = K.IGLESIA, tm = K.temaDelMes();
+      return { nombre: I.nombre, lema: I.lema, lema_denominacion: I.lemaDenominacion, direccion: I.direccion,
+        reuniones: I.reuniones.map((r) => { const n = K.nextMeeting(r.k); return { reunion: r.n, cuando: r.nota, proxima: K.fmtDate(n.date, "dm") }; }),
+        tema_del_mes: tm ? `${tm.titulo} (${tm.ref})` : null, fechas_proximas: K.fechasIglesia(K.today(), 90).map((c) => ({ fecha: K.fmtDate(c.date, "dm"), que: c.n })), reglas: I.reglas };
+    },
+    async preparar_pieza({ pieza }) {
+      const pc = K.PIECES().find((x) => x.k === pieza);
+      if (!pc) return { error: "Esa plantilla no existe" };
+      setMin(true);
+      if (pieza === "tema") { await TOOLS.disenar_versiculo({ referencia: (K.temaDelMes() || {}).ref, color: "linea", estilo: "luz" }); return { ok: true, nota: "La imagen del tema del mes está en pantalla." }; }
+      K.annSheet({ prefill: { title: pc.title, body: pc.body, date: pc.date, time: pc.time, pal: pc.pal, style: pc.style, layout: pc.layout }, after: () => K.bust("upcoming") });
+      return { ok: true, fecha: K.fmtDate(pc.date, "dm"), nota: `«${pc.n}» quedó abierto en el editor con la fecha calculada. El pastor lo revisa y lo envía.` };
+    },
+    async preparar_respuesta({ nombre, gracias }) {
+      if (K.P.sec !== "asistente") K.pastorGo("asistente");
+      setMin(true);
+      await K.pastorData.ask(`${gracias ? "Agradécele a" : "Responde a"} ${nombre || ""}`);
+      return { ok: true, nota: "La respuesta quedó en la pantalla del asistente para revisarla y enviarla por WhatsApp." };
+    },
+    async saludo_del_dia() {
+      if (K.P.sec !== "asistente") K.pastorGo("asistente");
+      setMin(true);
+      await K.pastorData.ask("Saludo de buenos días al grupo");
+      return { ok: true, saludo: K.IGLESIA.saludo, nota: "El saludo con el versículo del día quedó en pantalla para compartirlo." };
     },
   };
 
