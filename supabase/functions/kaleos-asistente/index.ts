@@ -12,7 +12,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
 // Lo que el asistente sabe de La Línea (de su Facebook y su grupo de WhatsApp; igual que docs/js/iglesia.js)
-const IGLESIA = `Iglesia de Dios E.C. "La Línea", 0 calle 4-08, La Línea Zona 6, Quetzaltenango (Región 4, Distrito Quetzaltenango No. 2).
+const IGLESIA = `Iglesia de Dios E.C. "La Línea", 0 calle 4-08, La Línea Zona 6, Quetzaltenango (Región 4, Distrito Quetzaltenango No. 2). Fundada en 1987; antes se llamaba «Tabernáculo de Alabanza»; aniversario a mediados de julio.
 Lema: «¡Proclamar las buenas nuevas de salvación! ¡Cristo es el Señor!». Lema de la denominación: «¡Adelante Iglesia de Dios!».
 Reuniones: culto dominical (hora por confirmar); Culto de Misiones el último domingo del mes; Semana de Oración y clamor la primera semana de cada mes, lunes a viernes 7:00 p. m.;
 Discipulado infantil martes 7:00 p. m.; Discipulado cristiano jueves 6:30 p. m.; Servicio de jóvenes sábado 6:00 p. m.

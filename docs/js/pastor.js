@@ -153,7 +153,7 @@
         return kmsg(`<div class="rich">${rs.map((k) => { const n = K.nextMeeting(k); return `<div class="li">${ic("agenda")}<div class="g"><b>${esc(n.n)}</b><span class="s">${esc(n.nota)}<br>Próxima: ${esc(K.cap(K.weekdayOf(n.date)))} ${esc(K.fmtDate(n.date, "dm"))}${n.hora ? " · " + esc(K.fmtTime(n.iso)) : ""}</span></div></div>`; }).join("")}
           ${g.reunion && g.reunion !== "dominical" ? `<div class="acts"><button class="btn sm" data-piece="${esc(g.reunion)}">${ic("avisos", "sm")}Preparar el aviso</button></div>` : ""}</div>`, { piece: g.reunion });
       }
-      if (g.tema === "lema") return kmsg(`<p>El lema de ${esc(I.nombre)}: <b>«${esc(I.lema)}»</b> Y el de la denominación: «${esc(I.lemaDenominacion)}»</p>`);
+      if (g.tema === "lema") return kmsg(`<p>El lema de ${esc(I.nombre)}: <b>«${esc(I.lema)}»</b> Y el de la denominación: «${esc(I.lemaDenominacion)}»</p>${I.fundacion ? `<p>La iglesia se fundó en ${I.fundacion}${I.nombreAnterior ? ` (antes se llamaba «${esc(I.nombreAnterior)}»)` : ""}: en julio cumple ${new Date().getFullYear() - I.fundacion + (new Date().getMonth() > 6 ? 1 : 0)} años.</p>` : ""}`);
       if (g.tema === "direccion") return kmsg(`<p>${esc(I.nombre)} está en <b>${esc(I.direccion)}</b>. ${esc(I.region)}.</p>`);
       if (g.tema === "tema") { const tm = K.temaDelMes(); return kmsg(tm ? `<p>Nuestro tema de ${esc(tm.mes)}: <b>«${esc(tm.titulo)}»</b> (${esc(tm.ref)}).</p><div class="row"><button class="btn sm gold" data-piece="tema">${ic("avisos", "sm")}Preparar la imagen</button></div>` : "<p>Todavía no hay tema para este mes. Puede escribirlo en el estudio de versículos.</p>", { piece: "tema" }); }
       if (g.tema === "calendario") {

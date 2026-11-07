@@ -447,7 +447,7 @@ async function suites() {
     ["Saludo de buenos días para el grupo", "saludo_dia"], ["el mensaje de la mañana", "saludo_dia"],
     ["Responde a la hermana Ana", "contestar", { who: "Ana Lucía Pérez" }], ["Agradécele a Pedro", "contestar", { who: "Pedro Ajú", gracias: true }], ["contesta a Esther", "contestar", { who: "Esther Quiché" }],
     ["¿A qué hora es el discipulado?", "info", { tema: "horario", reunion: "discipulado" }], ["¿Cuándo es la semana de oración?", "info", { tema: "horario", reunion: "oracion" }],
-    ["¿Qué día es el discipulado infantil?", "info", { reunion: "infantil" }], ["¿Cuál es el lema de la iglesia?", "info", { tema: "lema" }], ["¿Dónde queda la iglesia?", "info", { tema: "direccion" }],
+    ["¿Qué día es el discipulado infantil?", "info", { reunion: "infantil" }], ["¿Cuál es el lema de la iglesia?", "info", { tema: "lema" }], ["¿Cuándo se fundó la iglesia?", "info", { tema: "lema" }], ["¿Dónde queda la iglesia?", "info", { tema: "direccion" }],
     ["¿Cuál es el tema del mes?", "info", { tema: "tema" }], ["¿Qué fechas especiales vienen?", "info", { tema: "calendario" }],
     ["asdfgh", "responder"], ["", "responder"],
   ];

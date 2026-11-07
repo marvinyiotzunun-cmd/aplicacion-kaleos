@@ -14,6 +14,8 @@
     // el saludo de cada mañana en el grupo de WhatsApp (a las 6:00)
     saludo: "Que la gracia y la paz de nuestro Señor Jesucristo estén siempre con ustedes amados hermanos. ¡Buenos días!",
     version: "Reina-Valera 1960",
+    // fundada en 1987; antes se llamaba «Tabernáculo de Alabanza» (aniversario a mediados de julio)
+    fundacion: 1987, nombreAnterior: "Tabernáculo de Alabanza",
     // reuniones fijas (dow: 0 = domingo)
     reuniones: [
       { k: "dominical", n: "Culto dominical", dow: 0, hora: null, nota: "La hora no está publicada: confírmela." },
@@ -26,6 +28,7 @@
     // fechas del año que la iglesia celebra
     calendario: [
       { md: "04-13", n: "Aniversario de la Iglesia de Dios en Guatemala" },
+      { md: "07-15", n: "Aniversario de La Línea", nota: "a mediados de julio; fundada en 1987 (40 años en 2027)" },
       { md: "08-15", n: "Noche de fogata" },
       { md: "08-19", n: "Aniversario de la Iglesia de Dios" },
       { md: "08-31", n: "Día de la Biblia y Reconocimiento Pastoral", nota: "a fin de agosto" },

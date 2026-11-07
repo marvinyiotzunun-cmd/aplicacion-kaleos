@@ -195,7 +195,7 @@
       const k = /infantil|ninos/.test(t) ? "infantil" : /discipulado/.test(t) ? "discipulado" : /oracion|clamor/.test(t) ? "oracion" : /misiones/.test(t) ? "misiones" : /jovenes/.test(t) ? "jovenes" : /dominical|domingo|culto/.test(t) ? "dominical" : null;
       return { action: "info", args: { tema: "horario", reunion: k } };
     }
-    if (/\b(lema|mision de la iglesia|vision de la iglesia)\b/.test(t)) return { action: "info", args: { tema: "lema" } };
+    if (/\b(lema|mision de la iglesia|vision de la iglesia|cuando se fundo|fundacion de la iglesia|historia de la iglesia|tabernaculo de alabanza|cuantos anos tiene la iglesia)\b/.test(t)) return { action: "info", args: { tema: "lema" } };
     if (/\b(direccion|donde queda|ubicacion|donde esta la iglesia)\b/.test(t)) return { action: "info", args: { tema: "direccion" } };
     if (/\btema del mes\b|\bnuestro tema\b/.test(t) && !/\b(imagen|disena|diseno|haz|prepara|versiculo)\b/.test(t)) return { action: "info", args: { tema: "tema" } };
     if (/\b(fechas especiales|fechas importantes|que se celebra|calendario de la iglesia|aniversario de la iglesia|actividades del ano)\b/.test(t)) return { action: "info", args: { tema: "calendario" } };
