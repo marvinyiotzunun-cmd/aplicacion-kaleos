@@ -82,13 +82,13 @@
     const t = K.temaDelMes(), v = t && (K.VERSES.find(([r]) => r === t.ref) || [t.ref, ""]);
     const mk = (k, title, body, extra = {}) => { const n = K.nextMeeting(k); return { k, n: n.n, title, body, date: n.date, time: n.hora || "", ...extra }; };
     const list = [
-      mk("oracion", "Semana de Oración y clamor", "Un tiempo de Oración y clamor. De lunes a viernes, 7:00 p. m. Cordialmente invitados.", { pal: "linea", style: "cruz", layout: "cinta" }),
-      mk("misiones", "Culto de Misiones", `Cordialmente invitados al Culto de Misiones. Seguimos orando y apoyando el ${I.campana}. ¡Les esperamos!`, { pal: "esmeralda", style: "geometria", layout: "marco" }),
-      mk("discipulado", "Discipulado cristiano", "Les recordamos que es noche de Discipulado cristiano. Traigan sus tareas y lecciones. ¡Les esperamos!", { pal: "linea", style: "papiro", layout: "agenda" }),
-      mk("infantil", "Discipulado infantil", "Cordialmente invitados los niños al Discipulado infantil. ¡Les esperamos!", { pal: "cielo", style: "petalos", layout: "centro" }),
-      mk("jovenes", "Servicio de jóvenes", "Cordialmente invitados los jóvenes. ¡Sigamos adelante!", { pal: "tinta", style: "estrellas", layout: "fecha" }),
+      mk("oracion", "Semana de Oración y clamor", "Un tiempo de Oración y clamor. De lunes a viernes, 7:00 p. m. Cordialmente invitados.", { pal: "linea", style: "cruz", layout: "cinta", est: "e:sag-capilla:marino" }),
+      mk("misiones", "Culto de Misiones", `Cordialmente invitados al Culto de Misiones. Seguimos orando y apoyando el ${I.campana}. ¡Les esperamos!`, { pal: "esmeralda", style: "geometria", layout: "marco", est: "e:fot-estandarte:marino" }),
+      mk("discipulado", "Discipulado cristiano", "Les recordamos que es noche de Discipulado cristiano. Traigan sus tareas y lecciones. ¡Les esperamos!", { pal: "linea", style: "papiro", layout: "agenda", est: "e:edi-indice:marino" }),
+      mk("infantil", "Discipulado infantil", "Cordialmente invitados los niños al Discipulado infantil. ¡Les esperamos!", { pal: "cielo", style: "petalos", layout: "centro", est: "e:fie-globos:turquesa" }),
+      mk("jovenes", "Servicio de jóvenes", "Cordialmente invitados los jóvenes. ¡Sigamos adelante!", { pal: "tinta", style: "estrellas", layout: "fecha", est: "e:tip-eco:marino" }),
     ];
-    if (t) list.unshift({ k: "tema", n: "Tema del mes", title: `Nuestro tema de ${t.mes}: ${t.titulo}`, body: v && v[1] ? `«${v[1]}» ${t.ref}` : t.ref, date: "", time: "", pal: "linea", style: "luz", layout: "centro" });
+    if (t) list.unshift({ k: "tema", n: "Tema del mes", title: `Nuestro tema de ${t.mes}: ${t.titulo}`, body: v && v[1] ? `«${v[1]}» ${t.ref}` : t.ref, date: "", time: "", pal: "linea", style: "luz", layout: "centro", est: "e:edi-cita:linea" });
     return list;
   };
 })();

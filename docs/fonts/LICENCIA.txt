@@ -1,0 +1,2 @@
+Tipografías de Google Fonts, todas con licencia SIL Open Font License 1.1 (https://openfontlicense.org).
+Se guardan aquí para que los diseños del Estudio funcionen sin internet. La lista está en fonts.json.

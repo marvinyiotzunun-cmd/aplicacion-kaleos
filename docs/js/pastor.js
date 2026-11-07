@@ -3,7 +3,7 @@
   "use strict";
   const K = window.K, { esc, $, $$, ic } = K;
   const P = (K.P = { sec: "asistente", ctl: "ingresos", chat: [], reqF: "todos", day: null, hq: "", hl: "todos", comm: null, ctab: "avisos",
-    studio: { v: 0, custom: false, ctext: "", cref: "", kind: "luz", pal: "linea", layout: "clasico", fmt: "cuadrado", firma: true, seed: 3 } });
+    studio: { v: 0, custom: false, ctext: "", cref: "", kind: "luz", pal: "linea", layout: "clasico", fmt: "cuadrado", firma: true, seed: 3, mode: "estudio", est: "", photo: undefined } });
 
   const REQ_SELECT = "id, kind, note, for_name, for_date, status, created_at, profile_id, who:kaleos_profiles!profile_id(id, full_name, title, phone, birthday)";
   const requests = () => K.load("reqs", () => K.rows(K.sb.from("kaleos_prayer_requests").select(REQ_SELECT).eq("church_id", K.me.church_id).order("created_at", { ascending: false }).limit(150)));
@@ -70,7 +70,7 @@
     if (a.action === "aviso") {
       const comms = await K.communities(), c = comms.find((x) => x.slug === g.community);
       const pc = g.pieza ? K.PIECES().find((x) => x.k === g.pieza) : null;
-      const ann = pc ? { title: pc.title, body: pc.body, date: g.date || pc.date, time: pc.time, when: g.when || null, place: g.place || "", pal: pc.pal, style: pc.style, layout: pc.layout, community: c ? c.id : null }
+      const ann = pc ? { title: pc.title, body: pc.body, date: g.date || pc.date, time: pc.time, when: g.when || null, place: g.place || "", pal: pc.pal, style: pc.style, layout: pc.layout, est: pc.est, community: c ? c.id : null }
         : { title: g.title || "", body: g.body || "", when: g.when || null, date: g.date || "", place: g.place || "", community: c ? c.id : null };
       const whenTxt = ann.when ? K.cap(K.fmtWhen(ann.when)) : ann.date ? K.cap(`${K.weekdayOf(ann.date)} ${K.fmtDate(ann.date, "dm")}`) + (ann.time ? " · " + K.fmtTime(K.gtISO(ann.date, ann.time)) : "") : "";
       const has = ann.title || whenTxt;
@@ -251,7 +251,7 @@
       if (t.dataset.piece) {
         if (t.dataset.piece === "tema") return ask(el, "Imagen del tema del mes", "versiculo");
         const pc = K.PIECES().find((x) => x.k === t.dataset.piece);
-        if (pc) return K.annSheet({ prefill: { title: pc.title, body: pc.body, date: pc.date, time: pc.time, pal: pc.pal, style: pc.style, layout: pc.layout }, after: () => K.bust("upcoming") });
+        if (pc) return K.annSheet({ prefill: { title: pc.title, body: pc.body, date: pc.date, time: pc.time, pal: pc.pal, style: pc.style, layout: pc.layout, est: pc.est }, after: () => K.bust("upcoming") });
         return;
       }
       if (t.dataset.ann) return K.annSheet({ prefill: m.data && m.data.ann, after: () => { K.bust("upcoming"); P.chat.push(kmsg("<p><b>Listo.</b> El aviso quedó publicado en Kaleos.</p>")); drawChat(el); } });
@@ -273,7 +273,9 @@
   // ===== Estudio de versículos =====
   const studioOpts = () => {
     const st = P.studio, [ref, text] = st.custom ? [st.cref || "Referencia", st.ctext || "Escriba aquí el versículo que quiere compartir."] : K.VERSES[st.v];
-    return { text, ref, pal: st.pal, kind: st.kind, layout: st.layout, fmt: st.fmt, firma: st.firma, seed: st.seed };
+    const est = st.mode === "estudio" && K.EST && Object.keys(K.EST.T).length;
+    if (est && !K.EST.is(st.est)) st.est = K.EST.random("verse");
+    return { text, ref, pal: st.pal, kind: st.kind, layout: st.layout, fmt: st.fmt, firma: st.firma, seed: st.seed, ...(est ? { est: st.est, _photo: st.photo } : {}) };
   };
   function viewVersiculos(el) {
     const st = P.studio;
@@ -283,9 +285,11 @@
         <div class="prev ${st.fmt === "historia" ? "tall" : ""}">${K.vcv(studioOpts(), "")}</div>
         <div class="ctl"><span class="flabel">Versículo</span>${K.dd("verse", { icon: "versiculos", options: () => [...K.VERSES.map(([r, t], i) => ({ v: String(i), l: r, s: t.length > 60 ? t.slice(0, 58) + "…" : t })), { sep: 1 }, { v: "custom", l: "Escribir otro versículo", icon: "otro" }], value: () => (st.custom ? "custom" : String(st.v)), pick: (v) => { if (v === "custom") st.custom = true; else { st.custom = false; st.v = +v; } draw(); } })}
           ${st.custom ? `<input class="inp" id="cref" placeholder="Referencia, por ejemplo: Romanos 8:28" value="${esc(st.cref)}" aria-label="Referencia"><textarea class="inp" id="ctext" placeholder="Texto del versículo (Reina-Valera 1960)" aria-label="Texto del versículo">${esc(st.ctext)}</textarea>` : ""}</div>
-        <div class="ctl" style="align-items:stretch"><span class="flabel">Estilo de imagen · ${(Object.keys(K.ART_KINDS).length * Object.keys(K.PAL).length * Object.keys(K.LAYOUTS).length).toLocaleString("es-GT")} diseños por formato</span><div class="styles many">${Object.entries(K.ART_KINDS).map(([k, l]) => `<button class="sty" data-st="${k}" aria-pressed="${st.kind === k}"><span class="sw">${K.artCv(k, st.pal, st.seed)}</span>${l}</button>`).join("")}</div></div>
+        ${K.EST && Object.keys(K.EST.T).length ? `<div class="ctl"><span class="flabel">Diseño</span><div class="seg"><button data-vm="estudio" aria-pressed="${st.mode === "estudio"}">Estudio</button><button data-vm="clasico" aria-pressed="${st.mode !== "estudio"}">Clásicos</button></div>
+          ${st.mode === "estudio" ? '<div id="vest"></div>' : ""}</div>` : ""}
+        ${st.mode === "estudio" && K.EST && Object.keys(K.EST.T).length ? "" : `<div class="ctl" style="align-items:stretch"><span class="flabel">Estilo de imagen · ${(Object.keys(K.ART_KINDS).length * Object.keys(K.PAL).length * Object.keys(K.LAYOUTS).length).toLocaleString("es-GT")} diseños por formato</span><div class="styles many">${Object.entries(K.ART_KINDS).map(([k, l]) => `<button class="sty" data-st="${k}" aria-pressed="${st.kind === k}"><span class="sw">${K.artCv(k, st.pal, st.seed)}</span>${l}</button>`).join("")}</div></div>
         <div class="ctl"><span class="flabel">Color · ${K.PAL_NAMES[st.pal]}</span><div class="pals">${Object.keys(K.PAL).map((p) => `<button class="pal" data-sp="${p}" aria-pressed="${st.pal === p}" aria-label="${K.PAL_NAMES[p]}" style="background:linear-gradient(135deg,${K.PAL[p][0]},${K.PAL[p][1]} 60%,${K.PAL[p][2]})"></button>`).join("")}</div></div>
-        <div class="ctl"><span class="flabel">Composición</span><div class="seg wrap">${Object.entries(K.LAYOUTS).map(([k, l]) => `<button data-sl="${k}" aria-pressed="${st.layout === k}">${l}</button>`).join("")}</div></div>
+        <div class="ctl"><span class="flabel">Composición</span><div class="seg wrap">${Object.entries(K.LAYOUTS).map(([k, l]) => `<button data-sl="${k}" aria-pressed="${st.layout === k}">${l}</button>`).join("")}</div></div>`}
         <div class="row" style="flex-wrap:wrap">${K.dd("fmt", { label: "Formato", options: () => [{ v: "cuadrado", l: "Cuadrado", s: "Kaleos y Facebook" }, { v: "post", l: "Vertical 4:5", s: "Publicación" }, { v: "historia", l: "Estado de WhatsApp", s: "Pantalla completa 9:16" }], value: () => st.fmt, pick: (v) => { st.fmt = v; draw(); } })}
           <button class="toggle" role="switch" aria-checked="${st.firma}" id="firma"><i></i>Firma de la iglesia</button></div>
         <div style="display:grid;gap:8px"><button class="btn gold block" id="vpub">${ic("kaleos")}Publicar como versículo del día</button>
@@ -293,24 +297,27 @@
           <button class="btn sec block" id="vrnd">${ic("estrella", "sm")}Sorpréndame con otro diseño</button></div>
       </div>`;
       K.paint(el);
+      K.on(el, "[data-vm]", (b) => { st.mode = b.dataset.vm; draw(); });
+      if ($("#vest", el)) K.estPicker($("#vest", el), { kind: "verse", value: () => st.est, sample: () => studioOpts(), fmt: () => st.fmt, pick: (k, ph) => { st.est = k; st.photo = ph; redraw(); } });
       K.on(el, "[data-st]", (b) => { st.kind = b.dataset.st; draw(); });
       K.on(el, "[data-sp]", (b) => { st.pal = b.dataset.sp; draw(); });
       K.on(el, "[data-sl]", (b) => { st.layout = b.dataset.sl; draw(); });
       $("#firma", el).addEventListener("click", () => { st.firma = !st.firma; draw(); });
       $("#vseed", el).addEventListener("click", () => { st.seed = 1 + Math.floor(Math.random() * 90); draw(); });
       $("#vrnd", el).addEventListener("click", () => {
+        if (st.mode === "estudio" && K.EST && Object.keys(K.EST.T).length) { st.est = K.EST.random("verse", st.est); return draw(); }
         const pick = (o, not) => { const ks = Object.keys(o).filter((k) => k !== not); return ks[Math.floor(Math.random() * ks.length)]; };
         Object.assign(st, { kind: pick(K.ART_KINDS, st.kind), pal: pick(K.PAL, st.pal), layout: pick(K.LAYOUTS), seed: 1 + Math.floor(Math.random() * 90) }); draw();
       });
-      const redraw = () => { const cv = $(".prev canvas", el); if (cv) { K.VC[cv.dataset.vc] = studioOpts(); K.drawVerse(cv, K.VC[cv.dataset.vc]); } };
+      function redraw() { const cv = $(".prev canvas", el); if (cv) { K.VC[cv.dataset.vc] = studioOpts(); K.drawVerse(cv, K.VC[cv.dataset.vc]); } }
       ["cref", "ctext"].forEach((id) => { const i = $("#" + id, el); if (i) i.addEventListener("input", () => { st[id] = i.value; redraw(); }); });
-      $("#vwa", el).addEventListener("click", () => { const o = studioOpts(); K.shareCanvas($(".prev canvas", el), `«${o.text}» ${o.ref}`, "versiculo-kaleos.png"); });
+      $("#vwa", el).addEventListener("click", async () => { const o = studioOpts(); if (o.est) { await K.EST.prepare(o.est); redraw(); } K.shareCanvas($(".prev canvas", el), `«${o.text}» ${o.ref}`, "versiculo-kaleos.png"); });
       $("#vpub", el).addEventListener("click", async (e) => {
         const btn = e.currentTarget, o = studioOpts();
         if (st.custom && (!st.ctext.trim() || !st.cref.trim())) return K.toast("Escriba el versículo y su referencia");
         btn.disabled = true;
         const { error } = await K.sb.from("kaleos_verses").insert({ church_id: K.me.church_id, ref: o.ref, body: o.text, created_by: K.me.id,
-          style: { pal: o.pal, kind: o.kind, layout: o.layout, fmt: o.fmt, firma: o.firma, seed: o.seed } });
+          style: { pal: o.pal, kind: o.kind, layout: o.layout, fmt: o.fmt, firma: o.firma, seed: o.seed, ...(o.est ? { est: o.est } : {}) } });
         btn.disabled = false;
         if (error) return K.toast(K.errMsg(error), 4000);
         K.bust("verse"); K.toast("Publicado. Los hermanos lo ven hoy en su Inicio.");

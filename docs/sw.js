@@ -1,6 +1,6 @@
 // Guarda la app para que abra rápido y sin señal (los datos siempre vienen de la red)
-const CACHE = "kaleos-v11";
-const SHELL = ["./", "./index.html", "./styles.css", "./js/core.js", "./js/iglesia.js", "./js/cerebro.js", "./js/cards.js", "./js/member.js", "./js/pastor.js", "./js/central.js", "./js/voz.js", "./vendor/supabase.js", "./vendor/qrcode.js",
+const CACHE = "kaleos-v12";
+const SHELL = ["./", "./index.html", "./styles.css", "./js/core.js", "./js/iglesia.js", "./js/cerebro.js", "./js/estudio.js", "./js/estudio/tipografica.js", "./js/estudio/editorial.js", "./js/estudio/manuscrita.js", "./js/estudio/papel.js", "./js/estudio/fiesta.js", "./js/estudio/foto.js", "./js/estudio/sagrada.js", "./js/estudio-ui.js", "./js/cards.js", "./js/member.js", "./js/pastor.js", "./js/central.js", "./js/voz.js", "./vendor/supabase.js", "./vendor/qrcode.js",
   "./vendor/jsQR.js", "./img/logo.png", "./img/mark.png", "./img/mark-w.png", "./img/icon-192.png", "./img/orb-128.png", "./img/orb-512.png", "./img/favicon-32.png"];
 
 self.addEventListener("install", (e) => {

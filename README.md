@@ -17,7 +17,10 @@ App de cuidado pastoral de la **Iglesia de Dios Evangelio Completo de La Línea*
 ## Asistente y diseños
 - `docs/js/cerebro.js`: el asistente entiende sin internet fechas («el sábado a las 7», «el 15 de noviembre»), horas, nombres de hermanos, comunidades, citas bíblicas y temas («un versículo de paz»). Con la clave de OpenAI, ChatGPT elige de la misma lista de acciones (`supabase/functions/kaleos-asistente`).
 - `docs/js/iglesia.js`: lo que Kaleos sabe de La Línea (lema, reuniones fijas, calendario, tema del mes, saludo del pastor y reglas). Las fechas de la Semana de Oración, Misiones y Discipulado se calculan solas. Edite aquí los horarios cuando cambien.
-- Diseños: 13 fondos × 17 colores × 5 composiciones = 1.105 por tipo (versículos, avisos y tarjetas), más 6 tarjetas clásicas (Azul y Rosa como las de La Línea).
+- Diseños clásicos: 13 fondos × 17 colores × 5 composiciones = 1.105 por tipo (versículos, avisos y tarjetas), más 6 tarjetas clásicas (Azul y Rosa como las de La Línea).
+- **Estudio** (`docs/js/estudio.js` + `docs/js/estudio/<familia>.js`): 42 plantillas hechas a mano en 7 familias (tipográfica, editorial, manuscrita, papel y collage, fiesta, con foto, sagrada), 5 colores cada una: 210 diseños por tipo. Usan 22 tipografías propias en `docs/fonts` (licencia OFL, funcionan sin internet). Es lo primero que se abre en tarjetas, avisos y versículos; «Clásicos» sigue disponible.
+- Fotos: el pastor puede poner una foto del celular (solo va en la imagen que comparte). Las fotos fijas de la iglesia van en `docs/img/fotos/` con su lista en `fotos.json` (`[{ "id": "templo", "src": "templo.jpg", "name": "Templo" }]`).
+- Para revisar las plantillas: `node tests/estudio-sheet.js <carpeta> [familia] [--photo]` dibuja una hoja por plantilla y avisa si algún texto se sale. La guía de diseño está en `tests/ESTUDIO-BRIEF.md`.
 
 ## Roles
 - **Miembro**: ve su tarjeta, sus mensajes del pastor, su camino, el reverso y pide oración.

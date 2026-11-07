@@ -54,7 +54,21 @@
     return ({ "Hno.": "hermano ", "Hna.": "hermana ", Pastor: "pastor ", Pastora: "pastora ", Joven: "joven " }[t] || "") + f;
   };
   // La plantilla que la iglesia ya usa: rosa para ellas y azul para ellos (cumpleaños)
-  K.defaultTpl = (kind, m) => (kind === "cumple" ? (isWoman(m) ? "rosa" : "azul") : OCCASIONS[kind].tpl);
+  // Con el Estudio: un diseño hecho a mano distinto para cada hermano (siempre el mismo para la misma persona)
+  const EST_DEF = {
+    cumple_h: ["fie-globos:marino", "tip-cartel:marino", "fie-escarapela:marino", "fie-confeti:marino", "pap-boleto:marino", "fie-picado:marino", "tip-setentas:marino", "man-pizarra:verde"],
+    cumple_m: ["fie-globos:rosa", "man-acuarela:rosa", "fie-escarapela:rosa", "fie-pastel:fresa", "edi-invitacion:rosa", "man-ramita:rosa", "fie-picado:crema", "pap-marbete:rosa"],
+    bodas: ["edi-invitacion:linea", "sag-estampita:marino", "man-ramita:salvia", "edi-invitacion:marfil", "sag-sello:marino"],
+    otro: ["edi-revista:marino", "fie-memphis:crema", "man-carta:kraft", "pap-postal:crema", "tip-periodico:papel"],
+  };
+  K.defaultTpl = (kind, m) => {
+    if (K.EST && Object.keys(K.EST.T).length) {
+      const set = kind === "cumple" ? (isWoman(m) ? EST_DEF.cumple_m : EST_DEF.cumple_h) : kind === "bodas" ? EST_DEF.bodas : EST_DEF.otro;
+      const ok = set.filter((x) => K.EST.T[x.split(":")[0]]);
+      if (ok.length) return "e:" + ok[hashStr((m && (m.id || m.full_name)) || "k") % ok.length];
+    }
+    return kind === "cumple" ? (isWoman(m) ? "rosa" : "azul") : OCCASIONS[kind].tpl;
+  };
   function hashStr(s) {
     let h = 2166136261;
     for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); }
@@ -130,8 +144,10 @@
   const loadImg = (src) => new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
   K.cardReady = async () => {
     if (assets) return assets;
+    if (K.EST) { K.EST.ready(); if (K.EST.loadFotos) K.EST.loadFotos(); }
     try { await Promise.all([`600 80px ${SERIF}`, `italic 500 40px ${SERIF}`, `80px ${SCRIPT}`, `700 30px ${SANS}`, `800 30px ${SANS}`].map((f) => document.fonts.load(f))); } catch (_) {}
     const [logo, markW] = await Promise.all(["./img/logo.png", "./img/mark-w.png"].map(loadImg));
+    if (K.EST) K.EST.setAssets({ logo, markW });
     return (assets = { logo, markW });
   };
   function fitFont(ctx, text, font, size, maxW, maxLines, minSize) {
@@ -395,7 +411,8 @@
       drawSig(ctx, c, X, "left", col.sig, col.sub);
     }
   }
-  K.renderCard = (canvas, tpl, c) => {
+  K.renderCard = (canvas, tpl, c, photo) => {
+    if (K.EST && K.EST.is(tpl) && K.EST.parse(tpl)) return K.EST.render(canvas, "card", tpl, c, { seed: c.seed, photo });
     canvas.width = CW; canvas.height = CH;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, CW, CH);
@@ -427,14 +444,17 @@
     let to = opt.to;
     const { data } = await K.sb.from("kaleos_profiles").select("*").eq("id", to.id).maybeSingle();
     if (data) to = data;
-    let tpl = opt.tpl, vi = 0, file = null, edited = false;
+    let tpl = opt.tpl, vi = 0, file = null, edited = false, photo, picker = null, drawN = 0;
+    const est = !!(K.EST && Object.keys(K.EST.T).length);
+    let estKey = est ? (K.EST.is(tpl) ? tpl : K.EST.random("card")) : "";
     const dz = K.isDesign(tpl) ? K.designOf(tpl) : { k: "luz", p: "linea", f: "filete" };
     const slug = K.first(to.full_name).normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "kaleos", fname = `tarjeta-${slug}.png`;
     K.sheet(`${K.head(opt.title, opt.eyebrow)}
       <canvas class="gcard" aria-label="Vista previa de la tarjeta"></canvas>
-      <div class="chips">${Object.entries(TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join("")}
+      <div class="chips">${est ? `<button class="chip" data-tpl="estudio">${ic("estrella")}Estudio</button>` : ""}${Object.entries(TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join("")}
         <button class="chip" data-tpl="design">${ic("editar")}Diseños Kaleos</button>
         <button class="chip" id="ov">${ic("versiculos")}Otro versículo</button></div>
+      <div class="dzbox" id="estp" hidden></div>
       <div class="dzbox" id="dz" hidden>
         <div class="grid3"><div class="field"><label for="dzk">Fondo</label><select class="inp" id="dzk">${Object.entries(K.ART_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
           <div class="field"><label for="dzp">Color</label><select class="inp" id="dzp">${Object.keys(K.PAL).map((p) => `<option value="${p}">${K.PAL_NAMES[p]}</option>`).join("")}</select></div>
@@ -448,13 +468,17 @@
       <button class="linkbtn" id="gd">Descargar la imagen</button>`, (s, close) => {
       const cv = $(".gcard", s), gm = $("#gm", s);
       const sync = () => { $("#dzk", s).value = dz.k; $("#dzp", s).value = dz.p; $("#dzf", s).value = dz.f; };
-      const draw = () => {
-        file = null;
-        K.renderCard(cv, tpl, opt.card(vi));
-        const isD = K.isDesign(tpl);
-        $$("[data-tpl]", s).forEach((b) => b.classList.toggle("on", isD ? b.dataset.tpl === "design" : b.dataset.tpl === tpl));
+      const draw = async () => {
+        file = null; const n = ++drawN;
+        const isD = K.isDesign(tpl), isE = est && K.EST.is(tpl);
+        $$("[data-tpl]", s).forEach((b) => b.classList.toggle("on", isE ? b.dataset.tpl === "estudio" : isD ? b.dataset.tpl === "design" : b.dataset.tpl === tpl));
         $("#dz", s).hidden = !isD; if (isD) sync();
-        cv.toBlob((b) => { if (b) file = new File([b], fname, { type: "image/png" }); }, "image/png");
+        $("#estp", s).hidden = !isE;
+        if (isE && !picker) picker = K.estPicker($("#estp", s), { kind: "card", value: () => estKey, sample: () => opt.card(vi), pick: (k, ph) => { estKey = tpl = k; photo = ph; draw(); } });
+        if (isE) await K.EST.prepare(tpl);
+        if (n !== drawN) return;
+        K.renderCard(cv, tpl, opt.card(vi), photo);
+        cv.toBlob((b) => { if (b && n === drawN) file = new File([b], fname, { type: "image/png" }); }, "image/png");
         if (!edited) gm.value = opt.message();
         $("#how", s).innerHTML = deliveryNote(to);
       };
@@ -464,10 +488,10 @@
         document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       };
       gm.addEventListener("input", () => { edited = true; });
-      K.on(s, "[data-tpl]", (b) => { tpl = b.dataset.tpl === "design" ? K.designTpl(dz.k, dz.p, dz.f) : b.dataset.tpl; draw(); });
+      K.on(s, "[data-tpl]", (b) => { tpl = b.dataset.tpl === "design" ? K.designTpl(dz.k, dz.p, dz.f) : b.dataset.tpl === "estudio" ? estKey : b.dataset.tpl; draw(); });
       ["dzk", "dzp", "dzf"].forEach((id) => $("#" + id, s).addEventListener("change", () => { dz[{ dzk: "k", dzp: "p", dzf: "f" }[id]] = $("#" + id, s).value; tpl = K.designTpl(dz.k, dz.p, dz.f); draw(); }));
       $("#dzr", s).addEventListener("click", () => { tpl = K.randomDesign(tpl); Object.assign(dz, K.designOf(tpl)); draw(); });
-      $("#ov", s).addEventListener("click", () => { vi++; draw(); });
+      $("#ov", s).addEventListener("click", () => { vi++; draw(); if (picker) picker.refresh(); });
       $("#gd", s).addEventListener("click", download);
       $("#go", s).addEventListener("click", async (e) => {
         if (!file) return K.toast("Un momento, la tarjeta se está preparando…");
@@ -564,8 +588,8 @@
 
   // ===== mensaje guardado con tarjeta (en «Mis mensajes») =====
   K.drawMessageCard = async (cv, x) => {
-    if (x.card) { await K.cardReady(); K.renderCard(cv, x.card.tpl, x.card.c); return true; }
-    if (x.event_at || x.art) { K.drawAnn(cv, x); return true; }
+    if (x.card) { await K.cardReady(); if (K.EST && K.EST.is(x.card.tpl)) await K.EST.prepare(x.card.tpl); K.renderCard(cv, x.card.tpl, x.card.c); return true; }
+    if (x.event_at || x.art) { if (K.EST && x.art && x.art.e) { await K.cardReady(); await K.EST.prepare(K.EST.key(x.art.e, x.art.t, x.art.f)); } K.drawAnn(cv, x); return true; }
     return false;
   };
 
@@ -575,7 +599,10 @@
     const p = opt.prefill || {};
     const comms = await K.communities();
     const pals = Object.keys(K.PAL), kinds = Object.keys(K.ART_KINDS);
-    const st = { kind: p.kind || "invitacion", pal: p.pal || "linea", style: p.style || "luz", layout: p.layout || "fecha", seed: 1 + Math.floor(Math.random() * 90),
+    const est = !!(K.EST && Object.keys(K.EST.T).length);
+    if (est) { try { await K.cardReady(); } catch (_) {} }
+    const st = { mode: est ? "estudio" : "clasico", est: est ? (p.est && K.EST.is(p.est) ? p.est : K.EST.random("ann")) : "", photo: undefined,
+      kind: p.kind || "invitacion", pal: p.pal || "linea", style: p.style || "luz", layout: p.layout || "fecha", seed: 1 + Math.floor(Math.random() * 90),
       aud: p.community ? "c:" + (comms.find((c) => c.slug === p.community || c.id === p.community)?.id || "") : p.levels ? "lv" : "all",
       levels: p.levels || [] };
     if (st.aud === "c:") st.aud = "all";
@@ -597,15 +624,20 @@
       <div class="field"><label for="apl">Lugar</label><input class="inp" id="apl" value="${esc(p.place || "")}" placeholder="Templo central"></div>
       <div class="field"><span class="flabel">Para</span><div id="aud"></div><div class="chips" id="alv" ${st.aud === "lv" ? "" : "hidden"}>${K.LEVELS.map(([k, n]) => `<button type="button" class="chip" data-lv="${k}" aria-pressed="${st.levels.includes(k)}">${n}</button>`).join("")}</div></div>
       <div class="field"><label for="ab">Detalle</label><textarea class="inp" id="ab" placeholder="Lo que los hermanos deben saber">${esc(p.body || "")}</textarea></div>
-      <div class="field"><span class="flabel">Imagen</span><div class="pals">${pals.map((x) => `<button type="button" class="pal" data-p="${x}" aria-pressed="${st.pal === x}" aria-label="${K.PAL_NAMES[x]}" style="background:linear-gradient(135deg,${K.PAL[x][0]},${K.PAL[x][1]} 60%,${K.PAL[x][2]})"></button>`).join("")}</div>
+      <div class="field"><span class="flabel">Imagen</span>
+        ${est ? `<div class="seg" id="amode"><button type="button" data-am="estudio" aria-pressed="${st.mode === "estudio"}">Estudio</button><button type="button" data-am="clasico" aria-pressed="${st.mode === "clasico"}">Clásicos</button></div>
+        <div id="aest" style="margin-top:8px" ${st.mode === "estudio" ? "" : "hidden"}></div>` : ""}
+        <div id="aclas" ${st.mode === "estudio" ? "hidden" : ""}><div class="pals">${pals.map((x) => `<button type="button" class="pal" data-p="${x}" aria-pressed="${st.pal === x}" aria-label="${K.PAL_NAMES[x]}" style="background:linear-gradient(135deg,${K.PAL[x][0]},${K.PAL[x][1]} 60%,${K.PAL[x][2]})"></button>`).join("")}</div>
         <div class="chips wrapsel" style="margin-top:8px">${kinds.map((k) => `<button type="button" class="chip" data-s="${k}" aria-pressed="${st.style === k}">${K.ART_KINDS[k]}</button>`).join("")}</div>
         <div class="seg wrap" style="margin-top:8px">${Object.entries(K.ANN_LAYOUTS).map(([k, l]) => `<button type="button" data-l="${k}" aria-pressed="${st.layout === k}">${l}</button>`).join("")}</div>
         <button type="button" class="btn sec sm" id="arnd" style="margin-top:8px">${ic("estrella", "sm")}Sorpréndame</button>
-        <p class="fine">${nDesigns.toLocaleString("es-GT")} diseños posibles.</p></div>
+        <p class="fine">${nDesigns.toLocaleString("es-GT")} diseños posibles.</p></div></div>
       <div class="row" style="margin-top:auto"><button class="btn sec" style="flex:1" data-close>Cancelar</button><button class="btn gold" style="flex:2" id="apub">${ic("send", "sm")}Publicar y compartir</button></div>`, (d, close) => {
       const cv = $("#ap", d), val = (id) => $("#" + id, d).value.trim();
       const eventAt = () => (val("ad") ? K.gtISO(val("ad"), val("ah") || "00:00") : null);
-      const obj = () => ({ id: 1, title: val("at") || K.MSG_KINDS[st.kind].n, event_at: eventAt(), place: val("apl"), art: { k: st.style, p: st.pal, s: st.seed, l: st.layout } });
+      const estArt = () => { const q = K.EST.parse(st.est), f = K.EST.fotoOf(st.est); return { e: q.id, t: q.theme, ...(f ? { f } : {}) }; };
+      const obj = () => ({ id: 1, title: val("at") || K.MSG_KINDS[st.kind].n, event_at: eventAt(), place: val("apl"),
+        art: st.mode === "estudio" ? estArt() : { k: st.style, p: st.pal, s: st.seed, l: st.layout }, _photo: st.mode === "estudio" ? st.photo : undefined });
       const mark = () => {
         $$("[data-p]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.p === st.pal));
         $$("[data-s]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.s === st.style));
@@ -613,6 +645,15 @@
       };
       let t = 0;
       const prev = () => { clearTimeout(t); t = setTimeout(() => K.drawAnn(cv, obj()), 120); };
+      let picker = null;
+      const sample = () => { const o = obj(); return { ...o, title: val("at") || "Culto de oración" }; };
+      const showMode = () => {
+        if (!est) return;
+        $$("[data-am]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.am === st.mode));
+        $("#aest", d).hidden = st.mode !== "estudio"; $("#aclas", d).hidden = st.mode === "estudio";
+        if (st.mode === "estudio" && !picker) picker = K.estPicker($("#aest", d), { kind: "ann", value: () => st.est, sample, pick: (k, ph) => { st.est = k; st.photo = ph; prev(); } });
+      };
+      if (est) { K.on(d, "[data-am]", (b) => { st.mode = b.dataset.am; showMode(); prev(); }); showMode(); }
       const drawAud = () => {
         $("#aud", d).innerHTML = K.dd("annAud", { icon: "avisos", options: audOpts, value: () => st.aud, pick: (v) => { st.aud = v; $("#alv", d).hidden = v !== "lv"; drawAud(); } });
       };
@@ -630,12 +671,14 @@
         $("#at", d).value = x.title; $("#ab", d).value = x.body; $("#ad", d).value = x.date; $("#ah", d).value = x.time;
         if (!$("#apl", d).value) $("#apl", d).value = "Templo " + K.churchShort();
         Object.assign(st, { pal: x.pal, style: x.style, layout: x.layout, kind: x.date ? "invitacion" : "aviso" });
+        if (est && x.est && K.EST.parse(x.est)) { st.est = x.est; if (picker) { picker = null; showMode(); } }
         $$("[data-k]", d).forEach((y) => y.setAttribute("aria-pressed", y.dataset.k === st.kind));
         $$("[data-pc]", d).forEach((y) => y.classList.toggle("on", y === b));
         mark(); prev();
       });
       K.on(d, "[data-lv]", (b) => { const k = b.dataset.lv; st.levels = st.levels.includes(k) ? st.levels.filter((x) => x !== k) : [...st.levels, k]; b.setAttribute("aria-pressed", st.levels.includes(k)); });
-      ["at", "ad", "ah", "apl"].forEach((id) => $("#" + id, d).addEventListener("input", prev));
+      let rt = 0;
+      ["at", "ad", "ah", "apl"].forEach((id) => $("#" + id, d).addEventListener("input", () => { prev(); if (picker) { clearTimeout(rt); rt = setTimeout(() => picker.refresh(), 900); } }));
       prev();
       $("#apub", d).addEventListener("click", async (e) => {
         const o = obj();
@@ -643,12 +686,13 @@
         if (st.aud === "lv" && !st.levels.length) return K.toast("Elija al menos un nivel");
         const comm = st.aud.startsWith("c:") ? comms.find((c) => String(c.id) === st.aud.slice(2)) : null;
         const btn = e.currentTarget; btn.disabled = true;
+        if (st.mode === "estudio") await K.EST.prepare(st.est);
         const row = { church_id: K.me.church_id, profile_id: null, kind: st.kind, title: o.title, body: val("ab") || null, event_at: o.event_at,
           place: o.place || null, art: o.art, community_id: comm ? comm.id : null, levels: st.aud === "lv" ? st.levels : null, created_by: K.me.id };
         const { data, error } = await K.sb.from("kaleos_messages").insert(row).select().single();
         if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
         K.bust("anns", "msgs");
-        K.drawAnn(cv, { ...data, id: data.id });
+        K.drawAnn(cv, { ...data, id: data.id, _photo: o._photo });
         const text = `${o.title}${o.event_at ? "\n🗓️ " + K.cap(K.fmtWhen(o.event_at)) : ""}${o.place ? "\n📍 " + o.place : ""}${row.body ? "\n\n" + row.body : ""}\n\n${K.churchShort()} · Iglesia de Dios E.C.`;
         K.toast(comm ? `Publicado para ${comm.name}` : "Publicado en Kaleos");
         close();

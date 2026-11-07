@@ -1,0 +1,260 @@
+[
+{
+"family": "Anton",
+"weight": "400",
+"style": "normal",
+"file": "Anton-400.woff2"
+},
+{
+"family": "Bebas Neue",
+"weight": "400",
+"style": "normal",
+"file": "BebasNeue-400.woff2"
+},
+{
+"family": "Archivo Black",
+"weight": "400",
+"style": "normal",
+"file": "ArchivoBlack-400.woff2"
+},
+{
+"family": "Oswald",
+"weight": "500",
+"style": "normal",
+"file": "Oswald-500.woff2"
+},
+{
+"family": "Oswald",
+"weight": "700",
+"style": "normal",
+"file": "Oswald-700.woff2"
+},
+{
+"family": "Montserrat",
+"weight": "700",
+"style": "italic",
+"file": "Montserrat-700i.woff2"
+},
+{
+"family": "Montserrat",
+"weight": "500",
+"style": "normal",
+"file": "Montserrat-500.woff2"
+},
+{
+"family": "Montserrat",
+"weight": "700",
+"style": "normal",
+"file": "Montserrat-700.woff2"
+},
+{
+"family": "Montserrat",
+"weight": "800",
+"style": "normal",
+"file": "Montserrat-800.woff2"
+},
+{
+"family": "Work Sans",
+"weight": "400",
+"style": "normal",
+"file": "WorkSans-400.woff2"
+},
+{
+"family": "Work Sans",
+"weight": "600",
+"style": "normal",
+"file": "WorkSans-600.woff2"
+},
+{
+"family": "DM Serif Display",
+"weight": "400",
+"style": "italic",
+"file": "DMSerifDisplay-400i.woff2"
+},
+{
+"family": "DM Serif Display",
+"weight": "400",
+"style": "normal",
+"file": "DMSerifDisplay-400.woff2"
+},
+{
+"family": "Playfair Display",
+"weight": "500",
+"style": "italic",
+"file": "PlayfairDisplay-500i.woff2"
+},
+{
+"family": "Playfair Display",
+"weight": "700",
+"style": "italic",
+"file": "PlayfairDisplay-700i.woff2"
+},
+{
+"family": "Playfair Display",
+"weight": "500",
+"style": "normal",
+"file": "PlayfairDisplay-500.woff2"
+},
+{
+"family": "Playfair Display",
+"weight": "700",
+"style": "normal",
+"file": "PlayfairDisplay-700.woff2"
+},
+{
+"family": "Playfair Display",
+"weight": "900",
+"style": "normal",
+"file": "PlayfairDisplay-900.woff2"
+},
+{
+"family": "Fraunces",
+"weight": "400",
+"style": "italic",
+"file": "Fraunces-400i.woff2"
+},
+{
+"family": "Fraunces",
+"weight": "400",
+"style": "normal",
+"file": "Fraunces-400.woff2"
+},
+{
+"family": "Fraunces",
+"weight": "700",
+"style": "normal",
+"file": "Fraunces-700.woff2"
+},
+{
+"family": "Fraunces",
+"weight": "900",
+"style": "normal",
+"file": "Fraunces-900.woff2"
+},
+{
+"family": "Abril Fatface",
+"weight": "400",
+"style": "normal",
+"file": "AbrilFatface-400.woff2"
+},
+{
+"family": "Great Vibes",
+"weight": "400",
+"style": "normal",
+"file": "GreatVibes-400.woff2"
+},
+{
+"family": "Pacifico",
+"weight": "400",
+"style": "normal",
+"file": "Pacifico-400.woff2"
+},
+{
+"family": "Allura",
+"weight": "400",
+"style": "normal",
+"file": "Allura-400.woff2"
+},
+{
+"family": "Caveat",
+"weight": "500",
+"style": "normal",
+"file": "Caveat-500.woff2"
+},
+{
+"family": "Caveat",
+"weight": "700",
+"style": "normal",
+"file": "Caveat-700.woff2"
+},
+{
+"family": "Kaushan Script",
+"weight": "400",
+"style": "normal",
+"file": "KaushanScript-400.woff2"
+},
+{
+"family": "Yellowtail",
+"weight": "400",
+"style": "normal",
+"file": "Yellowtail-400.woff2"
+},
+{
+"family": "Special Elite",
+"weight": "400",
+"style": "normal",
+"file": "SpecialElite-400.woff2"
+},
+{
+"family": "Alfa Slab One",
+"weight": "400",
+"style": "normal",
+"file": "AlfaSlabOne-400.woff2"
+},
+{
+"family": "Shrikhand",
+"weight": "400",
+"style": "normal",
+"file": "Shrikhand-400.woff2"
+},
+{
+"family": "Permanent Marker",
+"weight": "400",
+"style": "normal",
+"file": "PermanentMarker-400.woff2"
+},
+{
+"family": "Cormorant Garamond",
+"weight": "500",
+"style": "italic",
+"file": "CormorantGaramond-500i.woff2"
+},
+{
+"family": "Cormorant Garamond",
+"weight": "600",
+"style": "italic",
+"file": "CormorantGaramond-600i.woff2"
+},
+{
+"family": "Cormorant Garamond",
+"weight": "500",
+"style": "normal",
+"file": "CormorantGaramond-500.woff2"
+},
+{
+"family": "Cormorant Garamond",
+"weight": "600",
+"style": "normal",
+"file": "CormorantGaramond-600.woff2"
+},
+{
+"family": "Cormorant Garamond",
+"weight": "700",
+"style": "normal",
+"file": "CormorantGaramond-700.woff2"
+},
+{
+"family": "Hanken Grotesk",
+"weight": "400",
+"style": "normal",
+"file": "HankenGrotesk-400.woff2"
+},
+{
+"family": "Hanken Grotesk",
+"weight": "600",
+"style": "normal",
+"file": "HankenGrotesk-600.woff2"
+},
+{
+"family": "Hanken Grotesk",
+"weight": "700",
+"style": "normal",
+"file": "HankenGrotesk-700.woff2"
+},
+{
+"family": "Hanken Grotesk",
+"weight": "800",
+"style": "normal",
+"file": "HankenGrotesk-800.woff2"
+}
+]

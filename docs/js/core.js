@@ -491,6 +491,7 @@
   const SERIF = '"Cormorant Garamond", Garamond, Georgia, serif', SANS = '"Hanken Grotesk", system-ui, sans-serif';
   K.SERIF = SERIF; K.SANS = SANS;
   function drawVerse(cv, o) {
+    if (K.EST && o.est && K.EST.is(o.est) && K.EST.parse(o.est)) return K.EST.render(cv, "verse", o.est, o, { fmt: o.fmt, seed: o.ref, photo: o._photo });
     const W = 1080, H = o.fmt === "historia" ? 1920 : o.fmt === "post" ? 1350 : 1080;
     cv.width = W; cv.height = H;
     const ctx = cv.getContext("2d");
@@ -591,6 +592,7 @@
   // composiciones (5) × estilos (13) × colores (17) = 1.105 diseños
   const ANN_LAYOUTS = (K.ANN_LAYOUTS = { fecha: "Fecha grande", centro: "Centrado", cinta: "Cinta", marco: "Marco", agenda: "Calendario" });
   K.drawAnn = (cv, a) => {
+    if (K.EST && a.art && a.art.e && K.EST.T[a.art.e]) return K.EST.render(cv, "ann", K.EST.key(a.art.e, a.art.t, a.art.f), a, { seed: a.id, photo: a._photo });
     const W = 1080, H = 1350; cv.width = W; cv.height = H;
     const ctx = cv.getContext("2d"), t = K.artOf(a.id || 1, a.art), L = ANN_LAYOUTS[t.l] ? t.l : "fecha";
     art(ctx, W, H, { kind: t.k, pal: t.p, seed: t.s });

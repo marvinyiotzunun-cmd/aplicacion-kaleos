@@ -129,7 +129,7 @@
       if (!pc) return { error: "Esa plantilla no existe" };
       setMin(true);
       if (pieza === "tema") { await TOOLS.disenar_versiculo({ referencia: (K.temaDelMes() || {}).ref, color: "linea", estilo: "luz" }); return { ok: true, nota: "La imagen del tema del mes está en pantalla." }; }
-      K.annSheet({ prefill: { title: pc.title, body: pc.body, date: pc.date, time: pc.time, pal: pc.pal, style: pc.style, layout: pc.layout }, after: () => K.bust("upcoming") });
+      K.annSheet({ prefill: { title: pc.title, body: pc.body, date: pc.date, time: pc.time, pal: pc.pal, style: pc.style, layout: pc.layout, est: pc.est }, after: () => K.bust("upcoming") });
       return { ok: true, fecha: K.fmtDate(pc.date, "dm"), nota: `«${pc.n}» quedó abierto en el editor con la fecha calculada. El pastor lo revisa y lo envía.` };
     },
     async preparar_respuesta({ nombre, gracias }) {

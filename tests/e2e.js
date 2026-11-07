@@ -288,6 +288,11 @@ async function suites() {
     await login(p, "pastor");
     await pick(p, '[data-dd="psec"]', "versiculos");
     await pick(p, '[data-dd="verse"]', "3");
+    // Estudio (lo primero que ve): elegir plantillas, colores y sorpréndame
+    await p.waitForSelector("#vest [data-et]");
+    for (let i = 0; i < 3; i++) await p.locator("#vest [data-et]").nth(i * 5).click();
+    await p.locator("#vest [data-eh]").nth(1).click(); await p.click("#vrnd");
+    await p.click('[data-vm="clasico"]');
     for (const k of ["luz", "aurora", "olas", "lienzo", "cumbres"]) { await p.click(`[data-st="${k}"]`); }
     for (const c of ["olivo", "lino", "alba"]) await p.click(`[data-sp="${c}"]`);
     for (const l of ["editorial", "monumental", "clasico"]) await p.click(`[data-sl="${l}"]`);
@@ -569,7 +574,7 @@ async function suites() {
     await pick(p, '[data-dd="psec"]', "saludos");
     await p.locator(".list [data-i]").first().click(); await p.waitForSelector(".sheet.show canvas.gcard");
     const def = await p.evaluate(() => document.querySelector('.sheet.show [data-tpl].on').dataset.tpl);
-    assert(["azul", "rosa", "marfil", "noche", "olivo"].includes(def), "plantilla inicial rara: " + def);
+    assert(def === "estudio", "la tarjeta no abre en el Estudio: " + def);
     for (const t of ["noche", "marfil", "fiesta", "olivo", "azul", "rosa", "design"]) await top(p).locator(`[data-tpl="${t}"]`).click();
     assert(await top(p).locator("#dz").isVisible(), "no se ven los diseños Kaleos");
     await top(p).locator("#dzk").selectOption("vitral"); await top(p).locator("#dzp").selectOption("linea"); await top(p).locator("#dzf").selectOption("arco");
@@ -581,6 +586,46 @@ async function suites() {
     const sent = await p.evaluate(() => __MOCK.db.tables.kaleos_messages.filter((m) => m.card).pop().card.tpl);
     assert(/^d:/.test(sent), "no guardó el diseño elegido: " + sent);
   });
+  await test("diseños: Estudio en la tarjeta (familias, plantillas, colores, foto del celular) y envío", async (p) => {
+    await login(p, "pastor");
+    await pick(p, '[data-dd="psec"]', "saludos");
+    await p.locator(".list [data-i]").first().click(); await p.waitForSelector(".sheet.show #estp [data-et]");
+    const fams = await top(p).locator("#estp [data-ef]").count();
+    assert(fams >= 8, "faltan familias en el Estudio: " + fams);
+    await top(p).locator('#estp [data-ef="sagrada"]').click();
+    assert((await top(p).locator("#estp [data-et]").count()) === 6, "la familia no filtra");
+    await top(p).locator("#estp [data-et]").nth(2).click(); await top(p).locator("#estp [data-eh]").nth(3).click();
+    await top(p).locator('#estp [data-ef=""]').click();
+    for (let i = 0; i < 3; i++) await top(p).locator("#estp [data-er]").click();
+    const [fc] = await Promise.all([p.waitForEvent("filechooser"), top(p).locator('#estp [data-ep="@cel"]').click()]);
+    await fc.setFiles(require("path").join(__dirname, "..", "docs", "img", "icon-512.png"));
+    await p.waitForSelector('.sheet.show #estp [data-ep="@cel"][aria-pressed="true"]');
+    await noOverflow(p, "estudio de tarjeta");
+    await p.waitForTimeout(1500); await top(p).locator("#go").click(); await toast(p, /Enviado/);
+    const sent = await p.evaluate(() => __MOCK.db.tables.kaleos_messages.filter((m) => m.card).pop().card.tpl);
+    assert(/^e:[a-z]{3}-[a-z]+:[a-z]+$/.test(sent), "no guardó el diseño del Estudio: " + sent);
+  }, { mobile: true });
+  await test("diseños: las 42 plantillas del Estudio × sus colores se dibujan en tarjeta, aviso y versículo", async (p) => {
+    await login(p, "pastor");
+    const r = await p.evaluate(async () => {
+      await K.cardReady(); await K.EST.ready(); await document.fonts.ready;
+      const c = document.createElement("canvas"), bad = [], counts = { card: 0, ann: 0, verse: 0 };
+      const busy = () => { const x = c.getContext("2d"), d = x.getImageData(0, 0, c.width, c.height).data; let mn = 255, mx = 0; for (let i = 0; i < d.length; i += 4 * 97) { const v = (d[i] + d[i + 1] + d[i + 2]) / 3; mn = Math.min(mn, v); mx = Math.max(mx, v); } return mx - mn > 90; };
+      const card = { kicker: "7 de noviembre", headline: "¡Feliz cumpleaños!", line: "Damos gracias a Dios por su vida", name: "Hna. María Fernanda López de García", verse: "Jehová te bendiga, y te guarde.", ref: "Números 6:24", signature: "Pastor Marvin Miche", from: "y toda la familia de La Línea", seed: "x" };
+      const fmts = ["cuadrado", "post", "historia"]; let n = 0;
+      for (const t of Object.values(K.EST.T)) for (const th of Object.keys(t.themes)) {
+        const key = K.EST.key(t.id, th);
+        try { K.renderCard(c, key, card); counts.card++; if (!busy()) bad.push(`tarjeta ${key}`); } catch (e) { bad.push(`tarjeta ${key}: ${e.message}`); }
+        try { K.drawAnn(c, { id: n, title: "Vigilia de oración", event_at: n % 3 ? new Date(Date.now() + n * 3600000).toISOString() : null, place: "Templo La Línea", art: { e: t.id, t: th } }); counts.ann++; if (!busy()) bad.push(`aviso ${key}`); } catch (e) { bad.push(`aviso ${key}: ${e.message}`); }
+        try { K.drawVerse(c, { text: K.VERSES[n % K.VERSES.length][1], ref: K.VERSES[n % K.VERSES.length][0], est: key, fmt: fmts[n % 3], firma: true }); counts.verse++; if (!busy()) bad.push(`versículo ${key}`); } catch (e) { bad.push(`versículo ${key}: ${e.message}`); }
+        n++;
+      }
+      return { bad, counts, n: Object.keys(K.EST.T).length };
+    });
+    assert(!r.bad.length, `${r.bad.length} diseños con problemas:\n    ` + r.bad.slice(0, 15).join("\n    "));
+    assert(r.n >= 42 && r.counts.card >= 210, "faltan plantillas: " + JSON.stringify(r));
+    console.log(`    Estudio: ${r.n} plantillas · ${r.counts.card} tarjetas, ${r.counts.ann} avisos, ${r.counts.verse} versículos`);
+  }, { allow: [/willReadFrequently/] });
   await test("diseños: editor de avisos (plantillas de la iglesia, 13 estilos, 5 composiciones, sorpréndame)", async (p) => {
     await login(p, "pastor");
     await p.evaluate(() => K.annSheet()); await p.waitForSelector(".drawer.show #at");
@@ -591,6 +636,8 @@ async function suites() {
       assert((await p.inputValue("#at")).length > 3, "la plantilla no llenó el título");
     }
     await p.locator('.drawer.show [data-pc]').nth(1).click();
+    assert(await p.locator(".drawer.show #aest [data-et]").count() >= 42, "el aviso no abre en el Estudio");
+    await p.click('.drawer.show [data-am="clasico"]');
     for (const k of ["estrellas", "vitral", "trigal", "acuarela", "petalos", "cruz", "geometria", "papiro"]) await p.click(`.drawer.show [data-s="${k}"]`);
     for (const l of ["centro", "cinta", "marco", "agenda", "fecha"]) await p.click(`.drawer.show [data-l="${l}"]`);
     await p.click(".drawer.show [data-p='linea']");
@@ -599,12 +646,21 @@ async function suites() {
     await p.click("#apub"); await toast(p, /Publicado/);
     const art = await p.evaluate(() => __MOCK.db.tables.kaleos_messages.filter((m) => m.art).pop().art);
     assert(art.l && art.k && art.p, "no guardó la composición: " + JSON.stringify(art));
+    // y con el Estudio: guarda plantilla y color
+    await p.evaluate(() => K.annSheet()); await p.waitForSelector(".drawer.show #aest [data-et]");
+    await p.locator(".drawer.show [data-pc]").nth(2).click();
+    await p.locator(".drawer.show #aest [data-et]").nth(7).click(); await p.locator(".drawer.show #aest [data-eh]").nth(2).click();
+    await noOverflow(p, "editor de avisos (Estudio)");
+    await p.click("#apub"); await toast(p, /Publicado/);
+    const art2 = await p.evaluate(() => __MOCK.db.tables.kaleos_messages.filter((m) => m.art).pop().art);
+    assert(art2.e && art2.t && !art2.k, "no guardó el diseño del Estudio: " + JSON.stringify(art2));
   });
   await test("diseños: estudio de versículos con los 13 estilos, 17 colores y 5 composiciones", async (p) => {
     await login(p, "pastor");
     await pick(p, '[data-dd="psec"]', "versiculos");
     const ks = await p.evaluate(() => Object.keys(K.ART_KINDS)), ps = await p.evaluate(() => Object.keys(K.PAL)), ls = await p.evaluate(() => Object.keys(K.LAYOUTS));
     assert(ks.length === 13 && ps.length === 17 && ls.length === 5, "cantidades distintas");
+    await p.click('[data-vm="clasico"]');
     for (const k of ks) await p.click(`[data-st="${k}"]`);
     for (const c of ps) await p.click(`[data-sp="${c}"]`);
     for (const l of ls) await p.click(`[data-sl="${l}"]`);
