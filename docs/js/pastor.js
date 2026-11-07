@@ -11,10 +11,12 @@
     .gte("event_at", new Date(Date.now() - 6 * 3600000).toISOString()).lte("event_at", new Date(Date.now() + 21 * 86400000).toISOString()).order("event_at").limit(60)));
   const reminders = () => K.load("rems", () => K.rows(K.sb.from("kaleos_reminders").select("*").eq("owner_id", K.me.id).eq("done", false).order("due_at").limit(60)));
   const bdaysWithin = (people, days) => {
-    const t = K.today(), set = new Map(Array.from({ length: days }, (_, i) => [K.addDays(t, i).slice(5), i]));
-    return people.filter((p) => p.active && p.birthday && set.has(String(p.birthday).slice(5, 10)) && p.id !== K.me.id)
-      .map((p) => ({ p, in: set.get(String(p.birthday).slice(5, 10)) })).sort((a, b) => a.in - b.in);
+    const t = K.today(), ds = Array.from({ length: days }, (_, i) => K.addDays(t, i));
+    return people.filter((p) => p.active && p.birthday && p.id !== K.me.id)
+      .map((p) => ({ p, in: ds.findIndex((d) => K.sameMD(p.birthday, d)) })).filter((x) => x.in >= 0).sort((a, b) => a.in - b.in);
   };
+  // minutos desde la medianoche (hora de Guatemala), para ordenar la agenda
+  const minsOf = (v) => { const [h, m] = new Date(v).toLocaleTimeString("en-GB", { timeZone: K.TZ, hour: "2-digit", minute: "2-digit" }).split(":"); return (+h % 24) * 60 + +m; };
   const age = (b) => { if (!b) return null; const t = K.today(); let a = +t.slice(0, 4) - +String(b).slice(0, 4); if (t.slice(5) < String(b).slice(5, 10)) a--; return a; };
 
   // ===== Asistente =====
@@ -36,14 +38,14 @@
     const pre = a.reply ? `<p>${esc(a.reply)}</p>` : "";
     if (a.action === "hoy") {
       const items = [
-        ...evs.filter((e) => K.dayOf(e.event_at) === t).map((e) => [K.fmtTime(e.event_at), e.title, e.place || "Actividad"]),
-        ...rems.filter((r) => K.dayOf(r.due_at) <= t).map((r) => [K.dayOf(r.due_at) < t ? "Pendiente" : K.fmtTime(r.due_at), r.title, "Recordatorio"]),
-        ...bdaysWithin(people, 1).map(({ p }) => ["Todo el día", "Cumpleaños de " + p.full_name, "Felicitar"]),
-        ...open.filter((r) => r.kind === "visita").map((r) => [r.for_date ? K.fmtDate(r.for_date, "ds") : "Visita", "Visita a " + (r.for_name || r.who?.full_name || ""), esc(r.note || "Pidió visita")]),
-      ];
+        ...rems.filter((r) => K.dayOf(r.due_at) <= t).map((r) => [K.dayOf(r.due_at) < t ? "Pendiente" : K.fmtTime(r.due_at), r.title, "Recordatorio", K.dayOf(r.due_at) < t ? 0 : 3 + minsOf(r.due_at)]),
+        ...bdaysWithin(people, 1).map(({ p }) => ["Todo el día", "Cumpleaños de " + p.full_name, "Felicitar", 1]),
+        ...open.filter((r) => r.kind === "visita").map((r) => [r.for_date ? K.fmtDate(r.for_date, "ds") : "Visita", "Visita a " + (r.for_name || r.who?.full_name || ""), r.note || "Pidió visita", 2]),
+        ...evs.filter((e) => K.dayOf(e.event_at) === t).map((e) => [K.fmtTime(e.event_at), e.title, e.place || "Actividad", 3 + minsOf(e.event_at)]),
+      ].sort((a, b) => a[3] - b[3]);
       const next = evs.find((e) => K.dayOf(e.event_at) > t);
       return kmsg(`${pre || `<p>Esto tiene hoy, ${esc(K.dpart(new Date(), { weekday: "long", day: "numeric" }))}:</p>`}<div class="rich">
-        ${items.length ? items.map(([h, ti, s], i) => `<div class="tl" ${i === items.length - 1 ? 'style="border-bottom:0"' : ""}><span class="h">${esc(h)}</span><span><b>${esc(ti)}</b><br><span class="muted" style="font-size:13px">${s}</span></span></div>`).join("") : `<p class="muted">Nada agendado para hoy.${next ? ` Lo próximo: <b>${esc(next.title)}</b>, ${esc(K.fmtWhen(next.event_at))}.` : ""}</p>`}
+        ${items.length ? items.map(([h, ti, s], i) => `<div class="tl" ${i === items.length - 1 ? 'style="border-bottom:0"' : ""}><span class="h">${esc(h)}</span><span><b>${esc(ti)}</b><br><span class="muted" style="font-size:13px">${esc(s)}</span></span></div>`).join("") : `<p class="muted">Nada agendado para hoy.${next ? ` Lo próximo: <b>${esc(next.title)}</b>, ${esc(K.fmtWhen(next.event_at))}.` : ""}</p>`}
         <div class="acts">${nuevos.length ? `<button class="btn sm" data-go="pedidos">${ic("pedidos", "sm")}Ver ${nuevos.length} ${nuevos.length === 1 ? "pedido nuevo" : "pedidos nuevos"}</button>` : ""}<button class="btn sec sm" data-go="agenda">Abrir agenda</button></div></div>`);
     }
     if (a.action === "cumple") {
@@ -52,7 +54,7 @@
         ${list.map(({ p, in: n }) => `<div class="li"><span class="avatar">${esc(K.ini(p.full_name))}</span><div class="g"><b>${esc(p.full_name)}</b><span class="s">${n === 0 ? "Hoy" : n === 1 ? "Mañana" : K.fmtDate(p.birthday, "dm")}${age(p.birthday) ? " · " + (age(p.birthday) + (n ? 1 : 0)) + " años" : ""}</span></div><button class="btn sm" data-card="${p.id}">Preparar tarjeta</button></div>`).join("")}</div>` : ""}`);
     }
     if (a.action === "pedidos") {
-      return kmsg(`${pre || `<p>${open.length ? `Tiene ${open.length} ${open.length === 1 ? "pedido abierto" : "pedidos abiertos"}:` : "No tiene pedidos pendientes."}</p>`}${open.length ? `<div class="rich">${open.slice(0, 6).map((r) => `<div class="li">${ic(K.REQ[r.kind].ic)}<div class="g"><b>${esc(K.REQ[r.kind].n)} · ${esc(r.who?.full_name || "")}</b><span class="s">${esc(r.note || r.for_name || "")}</span></div><span class="pill ${K.RSTAT[r.status][1]}">${K.RSTAT[r.status][0]}</span></div>`).join("")}
+      return kmsg(`${pre || `<p>${open.length ? `Tiene ${open.length} ${open.length === 1 ? "pedido abierto" : "pedidos abiertos"}:` : "No tiene pedidos pendientes."}</p>`}${open.length ? `<div class="rich">${open.slice(0, 6).map((r) => `<div class="li">${ic(K.reqOf(r.kind).ic)}<div class="g"><b>${esc(K.reqOf(r.kind).n)} · ${esc(r.who?.full_name || "")}</b><span class="s">${esc(r.note || r.for_name || "")}</span></div><span class="pill ${K.statOf(r.status)[1]}">${K.statOf(r.status)[0]}</span></div>`).join("")}
         <div class="acts"><button class="btn sm" data-go="pedidos">Abrir pedidos</button></div></div>` : ""}`);
     }
     if (a.action === "aviso") {
@@ -184,12 +186,12 @@
       ["cref", "ctext"].forEach((id) => { const i = $("#" + id, el); if (i) i.addEventListener("input", () => { st[id] = i.value; redraw(); }); });
       $("#vwa", el).addEventListener("click", () => { const o = studioOpts(); K.shareCanvas($(".prev canvas", el), `«${o.text}» ${o.ref}`, "versiculo-kaleos.png"); });
       $("#vpub", el).addEventListener("click", async (e) => {
-        const o = studioOpts();
+        const btn = e.currentTarget, o = studioOpts();
         if (st.custom && (!st.ctext.trim() || !st.cref.trim())) return K.toast("Escriba el versículo y su referencia");
-        e.currentTarget.disabled = true;
+        btn.disabled = true;
         const { error } = await K.sb.from("kaleos_verses").insert({ church_id: K.me.church_id, ref: o.ref, body: o.text, created_by: K.me.id,
           style: { pal: o.pal, kind: o.kind, layout: o.layout, fmt: o.fmt, firma: o.firma, seed: o.seed } });
-        e.currentTarget.disabled = false;
+        btn.disabled = false;
         if (error) return K.toast(K.errMsg(error), 4000);
         K.bust("verse"); K.toast("Publicado. Los hermanos lo ven hoy en su Inicio.");
       });
@@ -211,7 +213,7 @@
         acts.push(`<button class="btn sec sm" data-rs="${r.id}:atendida">${ic("check", "xs")}Atendido</button>`);
       } else acts.push(`<button class="btn sec sm" data-rs="${r.id}:nueva">Reabrir</button>`);
       if (who.phone && !self) acts.push(`<a class="btn sec sm" href="${K.waLink(who.phone, "")}" target="_blank" rel="noopener">${ic("chat", "xs")}WhatsApp</a>`);
-      return `<div class="req"><span class="k">${ic(K.REQ[r.kind].ic)}</span><div><div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${K.REQ[r.kind].n} · ${esc(self ? r.for_name || "Anotado por usted" : who.full_name || "")}</h3><span class="pill ${K.RSTAT[r.status][1]}">${K.RSTAT[r.status][0]}</span></div>
+      return `<div class="req"><span class="k">${ic(K.reqOf(r.kind).ic)}</span><div><div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${K.reqOf(r.kind).n} · ${esc(self ? r.for_name || "Anotado por usted" : who.full_name || "")}</h3><span class="pill ${K.statOf(r.status)[1]}">${K.statOf(r.status)[0]}</span></div>
         <p class="muted" style="font-size:13px;margin-top:2px">${[r.for_name && !self ? "Para " + r.for_name : "", r.for_date ? K.fmtDate(r.for_date, "dm") : "", new Date(r.created_at).toLocaleString("es-GT", { timeZone: K.TZ, dateStyle: "medium", timeStyle: "short" })].filter(Boolean).map(esc).join(" · ")}</p>${r.note ? `<p style="margin-top:6px">${esc(r.note)}</p>` : ""}
         <div class="acts">${acts.join("")}</div></div></div>`;
     };
@@ -263,11 +265,11 @@
     const t = K.today(); if (!P.day) P.day = t;
     const days = Array.from({ length: 7 }, (_, i) => K.addDays(t, i));
     const itemsOf = (d) => [
-      ...evs.filter((e) => K.dayOf(e.event_at) === d).map((e) => ({ h: K.fmtTime(e.event_at), t: e.title, k: e.community_id ? (comms.find((c) => c.id === e.community_id) || {}).name || "Comunidad" : e.levels ? "Reunión" : "Iglesia", ann: e.id })),
-      ...rems.filter((r) => K.dayOf(r.due_at) === d || (d === t && K.dayOf(r.due_at) < t)).map((r) => ({ h: K.dayOf(r.due_at) < t ? "Pendiente" : K.fmtTime(r.due_at), t: r.title, k: "Recordatorio", rem: r.id })),
-      ...reqs.filter((r) => r.kind === "visita" && r.status !== "atendida" && r.for_date === d).map((r) => ({ h: "Visita", t: "Visita a " + (r.for_name || r.who?.full_name || ""), k: "Pedido" })),
-      ...people.filter((p) => p.active && p.birthday && String(p.birthday).slice(5, 10) === d.slice(5)).map((p) => ({ h: "Todo el día", t: "Cumpleaños de " + p.full_name, k: "Felicitar", bday: p.id })),
-    ].sort((a, b) => a.h.localeCompare(b.h));
+      ...evs.filter((e) => K.dayOf(e.event_at) === d).map((e) => ({ h: K.fmtTime(e.event_at), o: 3 + minsOf(e.event_at), t: e.title, k: e.community_id ? (comms.find((c) => c.id === e.community_id) || {}).name || "Comunidad" : e.levels && e.levels.length ? "Reunión" : "Iglesia", ann: e.id })),
+      ...rems.filter((r) => K.dayOf(r.due_at) === d || (d === t && K.dayOf(r.due_at) < t)).map((r) => K.dayOf(r.due_at) < t ? { h: "Pendiente", o: 0, t: r.title, k: "Recordatorio", rem: r.id } : { h: K.fmtTime(r.due_at), o: 3 + minsOf(r.due_at), t: r.title, k: "Recordatorio", rem: r.id }),
+      ...reqs.filter((r) => r.kind === "visita" && r.status !== "atendida" && r.for_date === d).map((r) => ({ h: "Visita", o: 2, t: "Visita a " + (r.for_name || r.who?.full_name || ""), k: "Pedido" })),
+      ...people.filter((p) => p.active && p.birthday && p.id !== K.me.id && K.sameMD(p.birthday, d)).map((p) => ({ h: "Todo el día", o: 1, t: "Cumpleaños de " + p.full_name, k: "Felicitar", bday: p.id })),
+    ].sort((a, b) => a.o - b.o);
     el.innerHTML = `<div class="sec-h"><h2>Agenda</h2><button class="btn sm" id="newrem">${ic("plus", "xs")}Recordatorio</button></div>
       <div class="week">${days.map((d) => `<button class="wd" data-day="${d}" aria-pressed="${P.day === d}">${K.cap(K.weekdayOf(d).slice(0, 3))}<b>${+d.slice(8)}</b><i class="${itemsOf(d).length ? "" : "no"}"></i></button>`).join("")}</div>
       <div><div class="dayh">${esc(K.cap(K.weekdayOf(P.day)))} ${+P.day.slice(8)} de ${K.MONTHS[+P.day.slice(5, 7) - 1]}</div>

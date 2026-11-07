@@ -135,12 +135,13 @@
       K.on(s, "[data-ch]", (b) => { ch = b.dataset.ch; mark(); });
       mark();
       $("#dsave", s).addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
         const f = { p_phone: $("#dphone", s).value.trim(), p_email: $("#demail", s).value.trim(), p_birthday: $("#dbday", s).value || null, p_wedding: $("#dwed", s).value || null, p_channel: ch };
         if (ch === "whatsapp" && !f.p_phone) return K.toast("Escriba su teléfono para recibir por WhatsApp");
         if (ch === "correo" && !f.p_email) return K.toast("Escriba su correo para recibir por correo");
-        e.currentTarget.disabled = true;
+        btn.disabled = true;
         const { error } = await K.sb.rpc("kaleos_update_my_contact", f);
-        if (error) { e.currentTarget.disabled = false; return K.toast(K.errMsg(error), 4000); }
+        if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
         Object.assign(me, { phone: f.p_phone || null, email: f.p_email || null, birthday: f.p_birthday, wedding_date: f.p_wedding, preferred_channel: ch, contact_updated_at: new Date().toISOString() });
         K.toast("Datos guardados. ¡Gracias!"); close();
       });
@@ -245,7 +246,7 @@
     el.innerHTML = `<div class="hero ${light ? "light" : "on-art"}">${K.artCv(c.style, c.palette, c.seed)}
         <div class="hc"><button class="back" id="back">${ic("back", "sm")}Comunidades</button>${ic(c.emblem, "em")}<h1>${esc(c.name)}</h1><p class="s">${esc(c.subtitle || "")}</p></div></div>
       <div class="facts"><div><span class="eyebrow">Encargado</span><b>${esc(c.leader_name || "Por asignar")}</b></div><div><span class="eyebrow">Se reúne</span><b>${esc(c.meets || "—")}</b></div><div><span class="eyebrow">Integrantes</span><b class="num">${c.members}</b></div></div>
-      ${mine && c.whatsapp_url ? `<a class="btn sec block" href="${esc(c.whatsapp_url)}" target="_blank" rel="noopener">${ic("chat")}Abrir el grupo de WhatsApp</a>` : ""}
+      ${mine && K.url(c.whatsapp_url) ? `<a class="btn sec block" href="${esc(K.url(c.whatsapp_url))}" target="_blank" rel="noopener">${ic("chat")}Abrir el grupo de WhatsApp</a>` : ""}
       ${mine ? `<div class="tabs" role="tablist">${tabs.map(([v, l]) => `<button role="tab" aria-selected="${state.ctab === v}" data-ct="${v}">${l}</button>`).join("")}</div>` : ""}
       <div class="stack">${body}</div>`;
     const again = () => K.mount(el, K.viewComms, staff, state);
@@ -258,7 +259,7 @@
       jb.disabled = true;
       const { error } = await K.sb.from("kaleos_prayer_requests").insert({ church_id: K.me.church_id, profile_id: K.me.id, kind: "otro", note: `Quiero unirme a ${c.name}.`, created_by: K.me.id });
       if (error) { jb.disabled = false; return K.toast(K.errMsg(error), 4000); }
-      jb.textContent = "Pedido enviado"; K.toast("Su pastor y Secretaría recibieron su pedido");
+      jb.textContent = "Pedido enviado"; K.toast("Su pastor recibió su pedido");
     });
     const ob = $("#orient", el);
     if (ob) ob.addEventListener("click", async () => {
@@ -267,7 +268,7 @@
       const { error } = await K.sb.from("kaleos_communities").update({ guidance: v, guidance_at: new Date().toISOString() }).eq("id", c.id);
       if (error) return K.toast(K.errMsg(error), 4000);
       K.bust("comms"); K.toast("Orientación publicada");
-      if (c.whatsapp_url) { navigator.clipboard?.writeText(v).catch(() => {}); window.open(c.whatsapp_url, "_blank", "noopener"); K.toast("Copiada: péguela en el grupo de WhatsApp", 4000); }
+      if (K.url(c.whatsapp_url)) { navigator.clipboard?.writeText(v).catch(() => {}); window.open(K.url(c.whatsapp_url), "_blank", "noopener"); K.toast("Copiada: péguela en el grupo de WhatsApp", 4000); }
       again();
     });
   }
@@ -281,12 +282,13 @@
       <div class="field"><label for="rn">${kind === "oracion" ? "¿Por qué oramos?" : "Nota para el pastor"}</label><textarea class="inp" id="rn" placeholder="${esc(r.h)}"></textarea></div>
       <button class="btn block" id="rs">${ic("send")}Enviar al pastor</button>`, (s) => {
       $("#rs", s).addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
         const note = $("#rn", s).value.trim(), forName = $("#rf", s) ? $("#rf", s).value.trim() : "", forDate = $("#rd", s) ? $("#rd", s).value : "";
         if (kind === "otro" && !note) return K.toast("Cuéntele al pastor qué necesita");
-        e.currentTarget.disabled = true;
+        btn.disabled = true;
         const { error } = await K.sb.from("kaleos_prayer_requests").insert({ church_id: K.me.church_id, profile_id: K.me.id, kind, note: note || null,
           for_name: forName || null, for_date: forDate || null, created_by: K.me.id });
-        if (error) { e.currentTarget.disabled = false; return K.toast(K.errMsg(error), 4000); }
+        if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
         s.innerHTML = `<div class="grab"></div>${K.head("Pedido enviado")}<p style="font-size:17px">Su pastor ya lo tiene en su bandeja${kind === "oracion" ? " y la iglesia ora con usted" : ""}.</p><button class="btn sec block" data-close>Listo</button>`;
         if (after) after();
       });
@@ -297,7 +299,7 @@
     el.innerHTML = `<div class="ask-h"><span class="eyebrow">Pedir al pastor</span><h1 style="margin-top:10px">¿En qué le<span>acompañamos?</span></h1></div>
       <div class="rgrid">${Object.entries(K.REQ).map(([k, r]) => `<button class="rt" data-req="${k}">${ic(r.ic)}<span><b>${r.n}</b><span>${r.h}</span></span></button>`).join("")}</div>
       <section class="stack"><div class="sec-h"><h2 style="font-size:25px">Mis pedidos</h2></div>
-      <div class="list">${mine.length ? mine.map((r) => `<div class="li">${ic(K.REQ[r.kind].ic)}<div class="g"><b>${K.REQ[r.kind].n}${r.for_name ? " · " + esc(r.for_name) : ""}</b><span class="s">${K.dpart(r.created_at, { day: "numeric", month: "short" })}${r.note ? " · " + esc(r.note) : ""}</span></div><span class="pill ${K.RSTAT[r.status][1]}">${K.RSTAT[r.status][0]}</span></div>`).join("") : '<p class="empty">Aún no ha hecho pedidos.</p>'}</div></section>`;
+      <div class="list">${mine.length ? mine.map((r) => `<div class="li">${ic(K.reqOf(r.kind).ic)}<div class="g"><b>${K.reqOf(r.kind).n}${r.for_name ? " · " + esc(r.for_name) : ""}</b><span class="s">${K.dpart(r.created_at, { day: "numeric", month: "short" })}${r.note ? " · " + esc(r.note) : ""}</span></div><span class="pill ${K.statOf(r.status)[1]}">${K.statOf(r.status)[0]}</span></div>`).join("") : '<p class="empty">Aún no ha hecho pedidos.</p>'}</div></section>`;
     K.on(el, "[data-req]", (b) => K.reqSheet(b.dataset.req, () => K.mount(el, viewPedir)));
   }
 
@@ -346,12 +348,12 @@
         s.innerHTML = '<div class="grab"></div>' + draw(a, r); bind(s);
       });
       $("#gok", s).addEventListener("click", async (e) => {
-        const amount = Math.max(0, parseInt($("#ga", s).value.replace(/\D/g, "")) || 0);
+        const btn = e.currentTarget, amount = K.parseAmount($("#ga", s).value);
         if (!amount) return K.toast("Escriba el monto");
-        e.currentTarget.disabled = true;
+        btn.disabled = true;
         const { data, error } = await K.sb.from("kaleos_gifts").insert({ church_id: K.me.church_id, profile_id: K.me.id, kind, dest, fund_id: fundId, method, amount,
           reference: $("#gr", s) ? $("#gr", s).value.trim() || null : null, status: "pendiente" }).select().single();
-        if (error) { e.currentTarget.disabled = false; return K.toast(K.errMsg(error), 4000); }
+        if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
         s.innerHTML = `<div class="grab"></div>${K.head("Recibo digital")}<div class="receipt"><span class="eyebrow">${esc(K.GIFT_KINDS[kind])} · ${esc(dest)}</span><span class="big num">${K.Q(amount)}</span>
           <span class="mono" style="font-size:13px">${esc(data.receipt || "")} · ${K.fmtDate(data.gift_date)} · ${K.METHODS[method]}</span><span class="muted" style="font-size:13px">${method === "transferencia" ? "Secretaría lo confirma al ver el depósito." : "Entregue el sobre con este número; Secretaría lo ingresa en la Central."}</span></div>
           <button class="btn sec block" data-close>Listo</button>`;
@@ -376,8 +378,8 @@
       <div class="orient"><q>${esc(ch.mission || "Iglesia de Dios Evangelio Completo")}</q><p class="by">${esc(ch.name || "")}</p></div>
       ${n ? `<div class="stack"><div class="eyebrow">${esc(n.title)}</div><p style="font-size:16px;white-space:pre-line">${esc(n.body)}</p><button class="lnk" id="listen">${ic("escuchar")}Escuchar aviso</button></div>` : ""}
       <div class="list">
-        ${n && n.sermon_url ? `<a class="li" href="${esc(n.sermon_url)}" target="_blank" rel="noopener">${ic("versiculos")}<span class="g"><b>${esc(n.sermon_title || "Predicación del domingo")}</b><span class="s">Ver o escuchar</span></span>${ic("right", "sm")}</a>` : ""}
-        ${ch.whatsapp_url ? `<a class="li" href="${esc(ch.whatsapp_url)}" target="_blank" rel="noopener">${ic("chat")}<span class="g"><b>Comunidad de WhatsApp</b><span class="s">La comunidad de toda la iglesia</span></span>${ic("right", "sm")}</a>` : ""}
+        ${n && K.url(n.sermon_url) ? `<a class="li" href="${esc(K.url(n.sermon_url))}" target="_blank" rel="noopener">${ic("versiculos")}<span class="g"><b>${esc(n.sermon_title || "Predicación del domingo")}</b><span class="s">Ver o escuchar</span></span>${ic("right", "sm")}</a>` : ""}
+        ${K.url(ch.whatsapp_url) ? `<a class="li" href="${esc(K.url(ch.whatsapp_url))}" target="_blank" rel="noopener">${ic("chat")}<span class="g"><b>Comunidad de WhatsApp</b><span class="s">La comunidad de toda la iglesia</span></span>${ic("right", "sm")}</a>` : ""}
         ${ch.pastor_phone ? `<a class="li" href="tel:${esc(K.phoneDigits(ch.pastor_phone))}">${ic("llamar")}<span class="g"><b>Llamar al pastor</b><span class="s">${esc(ch.pastor_phone)}</span></span>${ic("right", "sm")}</a>` : ""}
       </div>`;
     if (n) $("#listen", el).addEventListener("click", () => K.speak(`${n.title}. ${n.body}`));
@@ -397,7 +399,7 @@
       const extra = [{ v: "mensajes", l: "Mis mensajes", icon: "pedidos", go: () => go("mensajes") }, { v: "datos", l: "Mis datos", icon: "editar", go: () => K.member.myData() },
         { v: "iglesia", l: "Mi iglesia", icon: "iglesia", go: () => go("iglesia") },
         ...(K.canScan() && K.me.role === "usher" ? [{ v: "escanear", l: "Registrar asistencia", icon: "escanear", go: () => go("escanear") }] : []),
-        ...(K.church.whatsapp_url ? [{ v: "wa", l: "Comunidad de WhatsApp", s: "La comunidad de toda la iglesia", icon: "chat", go: () => window.open(K.church.whatsapp_url, "_blank", "noopener") }] : [])];
+        ...(K.url(K.church.whatsapp_url) ? [{ v: "wa", l: "Comunidad de WhatsApp", s: "La comunidad de toda la iglesia", icon: "chat", go: () => window.open(K.url(K.church.whatsapp_url), "_blank", "noopener") }] : [])];
       if (!VIEWS[M.tab]) M.tab = "inicio";
       app.innerHTML = `<div class="phone">
         <header class="ah"><div class="wm">${K.orbMark()}<b>Kaleos</b></div>${K.userMenu(extra)}</header>

@@ -13,7 +13,7 @@
       <div class="secret"><span class="eyebrow">Número de miembro</span><b>${esc(no)}</b><span class="eyebrow" style="margin-top:8px">PIN</span><b>${esc(pin)}</b></div>
       ${phone ? `<a class="btn gold block" target="_blank" rel="noopener" href="${K.waLink(phone, msg)}">${ic("chat", "sm")}Enviar por WhatsApp</a>` : ""}
       <button class="btn sec block" id="cp">Copiar mensaje</button><button class="btn sec block" data-close>Listo</button>`, (s) => {
-      $("#cp", s).addEventListener("click", () => navigator.clipboard.writeText(msg).then(() => K.toast("Mensaje copiado")));
+      $("#cp", s).addEventListener("click", () => K.copy(msg, "Mensaje copiado"));
     });
   };
 
@@ -198,7 +198,12 @@
       if (error) return K.toast(K.errMsg(error));
       K.toast("Turno asignado");
     }, "change");
-    K.on(el, "[data-del]", async (b) => { await K.sb.from("kaleos_services").delete().eq("id", b.dataset.del); K.mount(el, cAgenda); });
+    K.on(el, "[data-del]", async (b) => {
+      if (!confirm("¿Quitar esta actividad de la agenda?")) return;
+      const { error } = await K.sb.from("kaleos_services").delete().eq("id", b.dataset.del);
+      if (error) return K.toast(K.errMsg(error), 4000);
+      K.mount(el, cAgenda);
+    });
     $("#addsv", el).addEventListener("submit", async (e) => {
       e.preventDefault();
       const a = $("#sa", el).value.trim(); if (!a) return K.toast("Escriba la actividad");
@@ -207,9 +212,10 @@
       K.mount(el, cAgenda);
     });
     $("#notify", el).addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
       const fresh = await K.rows(K.sb.from("kaleos_services").select("*").eq("church_id", K.me.church_id).gte("service_date", K.today()).is("notified_at", null).order("service_date"));
       if (!fresh.length) return K.toast("No hay turnos nuevos por avisar");
-      e.currentTarget.disabled = true;
+      btn.disabled = true;
       const msgs = [], wa = [], ROLE = { usher_id: "ujier", worship_id: "alabanza", media_id: "multimedia" };
       for (const r of fresh) {
         const when = `${K.cap(K.weekdayOf(r.service_date))} ${K.fmtDate(r.service_date, "dm")}`;
@@ -222,7 +228,7 @@
         const c = comms.find((x) => x.id === r.cleaning_id);
         if (c) msgs.push({ church_id: K.me.church_id, profile_id: null, community_id: c.id, kind: "aviso", title: `Limpieza: ${r.activity}`, body: `A ${c.name} le toca la limpieza del templo para el ${when}.`, event_at: K.gtISO(r.service_date, "08:00"), created_by: K.me.id });
       }
-      if (msgs.length) { const { error } = await K.sb.from("kaleos_messages").insert(msgs); if (error) { e.currentTarget.disabled = false; return K.toast(K.errMsg(error), 4000); } }
+      if (msgs.length) { const { error } = await K.sb.from("kaleos_messages").insert(msgs); if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); } }
       await K.sb.from("kaleos_services").update({ notified_at: new Date().toISOString() }).in("id", fresh.map((r) => r.id));
       K.bust("anns", "upcoming");
       K.sheet(`${K.head("Turnos avisados", msgs.length + " avisos en Kaleos")}<p class="muted">Ya les llegó a «Mis mensajes». Confírmelo por WhatsApp a cada uno:</p>
@@ -264,9 +270,11 @@
   }
 
   async function cInformes(el) {
+    // los pedidos son privados del pastor: Secretaría no los ve (así lo dice la base)
+    const pastor = K.me.role === "pastor";
     const [wk, people, comms, reqs] = await Promise.all([
       K.sb.rpc("kaleos_attendance_weeks", { p_weeks: 8 }), K.people(), K.communities(),
-      K.rows(K.sb.from("kaleos_prayer_requests").select("kind").eq("church_id", K.me.church_id).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString())),
+      pastor ? K.rows(K.sb.from("kaleos_prayer_requests").select("kind").eq("church_id", K.me.church_id).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString())) : [],
     ]);
     const att = (wk.data || []).map((r) => ({ l: K.fmtDate(r.service_date, "ds"), a: Number(r.people) }));
     const act = people.filter((p) => p.active);
@@ -277,7 +285,7 @@
     el.innerHTML = `<div class="panels">
       <div class="panel"><div class="sec-h"><h3>Asistencia por culto</h3>${trend !== null ? `<span class="pill ${trend >= 0 ? "ok" : "warn"}">${trend >= 0 ? "+" : "−"}${Math.abs(trend)} % último culto</span>` : ""}</div>${att.length ? K.barChart(att, ["a"]) : '<p class="muted">Aún no hay asistencia registrada.</p>'}<p class="fine">Personas registradas con su tarjeta al entrar (últimas 8 semanas).</p></div>
       <div class="panel"><h3>Hermanos por nivel</h3>${hbars(lv)}<p class="fine">${act.length} activos en Kaleos.</p></div>
-      <div class="panel"><h3>Pedidos de los últimos 30 días</h3>${hbars(rq)}<p class="fine">${reqs.length} pedidos.</p></div>
+      ${pastor ? `<div class="panel"><h3>Pedidos de los últimos 30 días</h3>${hbars(rq)}<p class="fine">${reqs.length} pedidos.</p></div>` : ""}
       <div class="panel"><h3>Comunidades más grandes</h3>${big.length ? hbars(big, "var(--sea)") : '<p class="muted">Sin comunidades.</p>'}</div>
     </div>`;
   }
@@ -336,14 +344,14 @@
       <div class="row" style="margin-top:auto"><button class="btn sec" style="flex:1" data-close>Cancelar</button><button class="btn" style="flex:2" id="ssave">${ic("check", "sm")}Registrar</button></div>`, (d, close) => {
       $("#stp", d).addEventListener("change", () => { const k = $("#stp", d).value; const i = dests.findIndex(([, id]) => { const f = funds.find((x) => x.id === id); return f && (k === "proyecto" ? f.kind === "proyecto" : k === "donacion" ? f.kind === "necesidad" : false); }); $("#sd", d).value = String(i >= 0 ? i : k === "ofrenda" ? 1 : 0); });
       $("#ssave", d).addEventListener("click", async (e) => {
-        const amount = parseInt($("#sa", d).value.replace(/\D/g, "")) || 0;
+        const btn = e.currentTarget, amount = K.parseAmount($("#sa", d).value);
         if (!amount) return K.toast("Escriba el monto");
         const [dest, fid] = dests[+$("#sd", d).value], m = $("#sm", d).value, num = $("#sn", d).value.trim();
-        e.currentTarget.disabled = true;
+        btn.disabled = true;
         const { data, error } = await K.sb.from("kaleos_gifts").insert({ church_id: K.me.church_id, profile_id: $("#sw", d).value || null, kind: $("#stp", d).value, dest, fund_id: fid || null,
           method: m, amount, receipt: m === "sobre" && num ? num : null, reference: m !== "sobre" && num ? num : null, gift_date: $("#sdt", d).value || K.today(),
           status: "confirmado", confirmed_by: K.me.id, confirmed_at: new Date().toISOString() }).select().single();
-        if (error) { e.currentTarget.disabled = false; return K.toast(K.errMsg(error), 4000); }
+        if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
         K.bust("kpis", "funds"); close(); K.toast(`Registrado · recibo ${data.receipt}`);
         const p = people.find((x) => x.id === data.profile_id);
         if (p && p.phone) setTimeout(() => K.sheet(`${K.head("Recibo " + data.receipt)}<p>Ya aparece en «Mis aportes» de ${esc(K.first(p.full_name))}.</p>
@@ -378,7 +386,7 @@
       $("#fa", d).addEventListener("click", (e) => e.currentTarget.setAttribute("aria-checked", e.currentTarget.getAttribute("aria-checked") !== "true"));
       $("#fsave", d).addEventListener("click", async () => {
         const v = (id) => $("#" + id, d).value.trim() || null;
-        const row = { kind: v("fk"), name: v("fn"), subtitle: v("fs"), goal: parseInt(($("#fg", d).value || "0").replace(/\D/g, "")) || 0, until_label: v("fu"), palette: v("fp"), style: v("fst"), active: $("#fa", d).getAttribute("aria-checked") === "true" };
+        const row = { kind: v("fk"), name: v("fn"), subtitle: v("fs"), goal: K.parseAmount($("#fg", d).value), until_label: v("fu"), palette: v("fp"), style: v("fst"), active: $("#fa", d).getAttribute("aria-checked") === "true" };
         if (!row.name) return K.toast("Escriba el nombre");
         const { error } = f ? await K.sb.from("kaleos_funds").update(row).eq("id", f.id) : await K.sb.from("kaleos_funds").insert({ ...row, church_id: K.me.church_id, emblem: row.kind === "proyecto" ? "proyecto" : "dar", sort: 50 });
         if (error) return K.toast(K.errMsg(error), 4000);

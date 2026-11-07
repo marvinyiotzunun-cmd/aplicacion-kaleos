@@ -362,8 +362,9 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .wd i.no{background:transparent}
 .wd[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
 .wd[aria-pressed="true"] b{color:var(--surface)}
-.ev{display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
-.ev .h{font:500 13px var(--f-mono);color:var(--ink-2);padding-top:3px}
+.ev{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+.ev .h{font:500 12px/1.35 var(--f-mono);color:var(--ink-2);padding-top:3px}
+.ev > .btn{align-self:center}
 .ev h3{font:600 21px/1.15 var(--f-disp)}
 .dayh{font:italic 600 26px var(--f-disp)}
 
@@ -575,3 +576,6 @@ a.li{text-decoration:none;color:inherit}
 .voz.min .vbtn .ic{width:18px;height:18px}
 .ctl-view .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ctl-view .panels,.ctl-view .pgrid{grid-template-columns:minmax(0,1fr)}
+
+/* En la Central el título de arriba ya nombra la sección: no repetirlo dentro de la vista */
+.dmain #cm > .sec-h:first-child h2{display:none}

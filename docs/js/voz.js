@@ -68,7 +68,7 @@
     },
     async ver_pedidos() {
       const reqs = await K.pastorData.requests();
-      return { pendientes: reqs.filter((r) => r.status !== "atendida").slice(0, 15).map((r) => ({ tipo: K.REQ[r.kind].n, de: r.who?.full_name, para: r.for_name, nota: r.note, estado: K.RSTAT[r.status][0] })) };
+      return { pendientes: reqs.filter((r) => r.status !== "atendida").slice(0, 15).map((r) => ({ tipo: K.reqOf(r.kind).n, de: r.who?.full_name, para: r.for_name, nota: r.note, estado: K.statOf(r.status)[0] })) };
     },
     async ver_cumpleanos({ dias = 7 }) {
       return { cumpleanos: K.pastorData.bdaysWithin(await K.people(), Math.min(31, Math.max(1, dias))).map(({ p, in: n }) => ({ nombre: p.full_name, en_dias: n, cumple: (K.pastorData.age(p.birthday) || 0) + (n ? 1 : 0) || null })) };
@@ -108,8 +108,10 @@
       return { ok: true, nota: "La imagen está en pantalla. El pastor la publica o la comparte con los botones." };
     },
     async preparar_tarjeta({ nombre }) {
-      const q = String(nombre || "").toLowerCase(), p = (await K.people()).find((x) => x.full_name.toLowerCase().includes(q));
+      const plain = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const q = plain(nombre), p = q && (await K.people()).find((x) => x.active && plain(x.full_name).includes(q));
       if (!p) return { error: "No encontré a ese hermano" };
+      if (!p.birthday) return { error: "Ese hermano no tiene registrada su fecha de cumpleaños" };
       setMin(true); K.greetBirthday(p);
       return { ok: true, nota: `La tarjeta para ${p.full_name} quedó abierta para revisarla y enviarla.` };
     },

@@ -8,10 +8,17 @@ App de cuidado pastoral de la **Iglesia de Dios Evangelio Completo de La Línea*
 - `supabase/migrations/`: tablas `kaleos_*` con RLS y funciones (asistencia, panel, reporte).
 - `supabase/functions/kaleos-admin/`: alta de hermanos y cambio de PIN (usa la clave de servicio).
 
+## Pruebas
+`npm test` (o `node tests/e2e.js`) abre la app en Chromium con un Supabase simulado (`tests/mock-supabase.js`) que copia las reglas de la base (RLS), sus restricciones y funciones, y prueba cada sección con las tres cuentas de ejemplo, en celular y computadora, con tema claro y oscuro. No toca la base real.
+- Solo una parte: `node tests/e2e.js pastor` (filtra por nombre de prueba).
+- Con capturas: `SHOTS=1 node tests/e2e.js` (quedan en `tests/shots/`).
+- Necesita Node 18+ y Playwright (`npm i -D playwright && npx playwright install chromium`).
+
 ## Roles
 - **Miembro**: ve su tarjeta, sus mensajes del pastor, su camino, el reverso y pide oración.
-- **Ujier**: además escanea los códigos al entrar.
-- **Pastor**: panel, hermanos, saludos, escaneo, avisos, datos de la iglesia y reporte.
+- **Pastor**: asistente, versículos, pedidos, agenda, hermanos, comunidades, saludos, mayordomía (para dar), controles de solo lectura, reporte y datos de la iglesia.
+- **Secretaría** (Kaleos Central): personas, comunidades, turnos de servicio, avisos, informes, asistencia, reporte y mayordomía (confirmar y registrar aportes, proyectos).
+- **Ujier** (perfil antiguo, aún admitido): además escanea los códigos al entrar.
 
 ## Inicio de sesión
 Número de miembro (por ejemplo `LL-0001`) y un PIN de 6 números que entrega el pastor. No hace falta correo.

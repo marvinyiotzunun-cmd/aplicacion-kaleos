@@ -67,19 +67,19 @@
   K.occasionsFor = (members, specials, from = -3, to = 14) => {
     const out = [], t = K.today();
     for (let i = from; i <= to; i++) {
-      const d = K.addDays(t, i), md = d.slice(5), y = Number(d.slice(0, 4));
+      const d = K.addDays(t, i), y = Number(d.slice(0, 4));
       for (const m of members) {
         if (!m.active || m.id === K.me.id) continue;
-        if (m.birthday && String(m.birthday).slice(5, 10) === md) out.push({ kind: "cumple", key: "cumple", date: d, m });
+        if (m.birthday && K.sameMD(m.birthday, d)) out.push({ kind: "cumple", key: "cumple", date: d, m });
         for (const [kind, f] of [["bautismo", "baptism_date"], ["iglesia", "member_since"], ["bodas", "wedding_date"]]) {
           const v = m[f] && String(m[f]);
-          if (v && v.slice(5, 10) === md && y > Number(v.slice(0, 4))) out.push({ kind, key: kind, date: d, m, years: y - Number(v.slice(0, 4)) });
+          if (v && K.sameMD(v, d) && y > Number(v.slice(0, 4))) out.push({ kind, key: kind, date: d, m, years: y - Number(v.slice(0, 4)) });
         }
       }
       for (const sp of specials) {
         const m = members.find((x) => x.id === sp.profile_id), v = String(sp.event_date);
         if (!m || !m.active) continue;
-        if (sp.yearly ? v.slice(5, 10) === md && y >= Number(v.slice(0, 4)) : v === d)
+        if (sp.yearly ? K.sameMD(v, d) && y >= Number(v.slice(0, 4)) : v === d)
           out.push({ kind: "especial", key: "especial:" + sp.id, date: d, m, label: sp.label, years: sp.yearly ? y - Number(v.slice(0, 4)) : 0 });
       }
     }
@@ -384,9 +384,9 @@
   });
   // Felicitar a alguien que cumple años (desde el asistente o la agenda)
   K.greetBirthday = (p, after) => {
-    const md = String(p.birthday).slice(5, 10), t = K.today();
-    let d = t.slice(0, 4) + "-" + md;
-    if (K.dayDiff(d, t) < -3) d = Number(t.slice(0, 4)) + 1 + "-" + md;
+    const t = K.today(), on = (y) => { const md = String(p.birthday).slice(5, 10), leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0); return `${y}-${md === "02-29" && !leap ? "02-28" : md}`; };
+    let d = on(+t.slice(0, 4));
+    if (K.dayDiff(d, t) < -3) d = on(+t.slice(0, 4) + 1);
     return K.greetSheet({ kind: "cumple", key: "cumple", date: d, m: p }, after);
   };
 

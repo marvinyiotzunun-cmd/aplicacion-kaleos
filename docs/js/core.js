@@ -24,6 +24,8 @@
     otro: { n: "Otra cosa", ic: "otro", h: "Cuéntele al pastor lo que necesita." },
   };
   K.RSTAT = { nueva: ["Nuevo", "warn"], orando: ["En camino", ""], atendida: ["Atendido", "ok"] };
+  K.reqOf = (k) => K.REQ[k] || K.REQ.otro;
+  K.statOf = (s) => K.RSTAT[s] || K.RSTAT.nueva;
   K.MSG_KINDS = {
     invitacion: { n: "Invitación", head: "¡Le invitamos!", tpl: "noche" },
     recordatorio: { n: "Recordatorio", head: "No lo olvide", tpl: "marfil" },
@@ -63,15 +65,33 @@
   K.weekdayOf = (s) => K.WEEKDAYS[new Date(s + "T12:00:00Z").getUTCDay()];
   // Fecha y hora local de Guatemala (UTC-6, sin horario de verano) a ISO
   K.gtISO = (date, time = "00:00") => new Date(`${date}T${time}:00-06:00`).toISOString();
-  K.Q = (n) => "Q " + Number(n || 0).toLocaleString("es-GT", { maximumFractionDigits: 0 });
+  // Quetzales: sin centavos si es un monto redondo, con dos decimales si los tiene
+  K.Q = (n) => { const v = Number(n || 0), d = Math.round(Math.abs(v) * 100) % 100 ? 2 : 0; return "Q " + v.toLocaleString("es-GT", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  // Lee un monto escrito a mano: «150», «150.50», «1,500.75», «Q 1 500», «150,5»
+  K.parseAmount = (s) => {
+    let t = String(s ?? "").replace(/[^\d.,]/g, "");
+    if (t.includes(".") && t.includes(",")) t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+    else if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
+    else t = t.replace(/,/g, "");
+    const v = Math.round(parseFloat(t) * 100) / 100;
+    return v > 0 && isFinite(v) ? v : 0;
+  };
   K.pct = (a, b) => (b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0);
-  K.isBirthday = (p) => p && p.birthday && String(p.birthday).slice(5, 10) === today().slice(5, 10);
+  // ¿La fecha v (aaaa-mm-dd) se celebra el día d? Los nacidos un 29 de febrero celebran el 28 en los años no bisiestos.
+  K.sameMD = (v, d) => {
+    if (!v || !d) return false;
+    const a = String(v).slice(5, 10), b = String(d).slice(5, 10), y = +String(d).slice(0, 4);
+    return a === b || (a === "02-29" && b === "02-28" && !(y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)));
+  };
+  K.isBirthday = (p) => !!(p && p.birthday && K.sameMD(p.birthday, today()));
   K.phoneDigits = (p) => String(p || "").replace(/\D/g, "");
   K.waLink = (phone, text) => {
     let d = K.phoneDigits(phone);
     if (d.length === 8) d = "502" + d; // Guatemala
     return `https://wa.me/${d}?text=${encodeURIComponent(text)}`;
   };
+  // Enlace escrito a mano: sin «https://» se lo agrega; cualquier cosa que no sea una página web se descarta
+  K.url = (u) => { const s = String(u || "").trim(); if (/^https?:\/\//i.test(s)) return s; return /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s) ? "https://" + s : ""; };
   K.waOpen = (text, phone) => window.open(phone ? K.waLink(phone, text) : `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
   K.errMsg = (e) => {
     const m = (e && (e.message || e.error_description || e.error)) || String(e);
@@ -100,6 +120,9 @@
     if (data && data.error) throw new Error(data.error);
     return data;
   };
+  // Copia al portapapeles; si el navegador no deja, lo dice en vez de fallar callado
+  K.copy = (text, done = "Copiado") => (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error("sin portapapeles")))
+    .then(() => { K.toast(done); return true; }, () => { K.toast("No se pudo copiar. Mantenga presionado el texto para copiarlo.", 4000); return false; });
   K.qrSvg = (text) => { const q = window.qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); };
   K.speak = (text) => {
     if (!("speechSynthesis" in window)) return K.toast("Este teléfono no puede leer en voz alta");
@@ -124,8 +147,8 @@
   K.shareCanvas = (cv, text, name, phone) => cv.toBlob(async (b) => {
     const file = b && new File([b], name, { type: "image/png" });
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], text }); } catch (err) { if (err.name !== "AbortError") K.toast(K.errMsg(err)); }
-      return;
+      // si el teléfono ya no deja compartir (pasó mucho tiempo desde el toque), se baja la imagen y se abre WhatsApp
+      try { await navigator.share({ files: [file], text }); return; } catch (err) { if (err.name === "AbortError") return; }
     }
     if (file) { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
     K.waOpen(text, phone);
@@ -552,8 +575,12 @@
   K.sheet = (html, onMount) => openLayer("sheet", html, onMount);
   K.drawer = (html, onMount) => openLayer(window.innerWidth >= 700 ? "drawer" : "sheet", html, onMount);
   K.closeAll = (now) => {
+    // cierra las hojas abiertas ahora; una que se abra enseguida no debe desaparecer con ellas ni quedarse sin fondo
     $$(".sheet,.drawer").forEach((e) => { e.classList.remove("show"); if (now) e.remove(); else setTimeout(() => e.remove(), 280); });
-    const sc = $("#scrim"); if (sc) { sc.classList.remove("show"); if (now) sc.hidden = true; else setTimeout(() => (sc.hidden = true), 220); }
+    const sc = $("#scrim"); if (!sc) return;
+    sc.classList.remove("show");
+    if (now) sc.hidden = true;
+    else setTimeout(() => { if (!$(".sheet.show,.drawer.show")) sc.hidden = true; }, 220);
   };
   K.head = (title, eyebrow) => `<div class="sh"><div style="flex:1;min-width:0">${eyebrow ? `<span class="eyebrow">${esc(eyebrow)}</span>` : ""}<h2${eyebrow ? ' style="margin-top:6px"' : ""}>${esc(title)}</h2></div><button class="iconbtn" data-close aria-label="Cerrar">${ic("close")}</button></div>`;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDD(); K.closeAll(); } });
@@ -662,11 +689,14 @@
       </form></div>`;
     $("#f").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const btn = $("#go"); btn.disabled = true; btn.textContent = "Entrando…";
-      const no = K.normalizeMemberNo($("#no").value);
-      const { error } = await K.sb.auth.signInWithPassword({ email: emailFor(no), password: $("#pin").value.trim() });
-      if (error) { btn.disabled = false; btn.textContent = "Entrar"; return K.toast(K.errMsg(error)); }
-      await K.loadMe();
+      const btn = $("#go"), ready = () => { btn.disabled = false; btn.textContent = "Entrar"; };
+      btn.disabled = true; btn.textContent = "Entrando…";
+      try {
+        const no = K.normalizeMemberNo($("#no").value);
+        const { error } = await K.sb.auth.signInWithPassword({ email: emailFor(no), password: $("#pin").value.trim() });
+        if (error) { ready(); return K.toast(K.errMsg(error)); }
+        await K.loadMe();
+      } catch (err) { console.error(err); ready(); K.toast(K.errMsg(err), 4000); }
     });
   }
   K.renderLogin = renderLogin;
@@ -799,16 +829,19 @@
     $("#pr", el).addEventListener("click", () => window.print());
     $("#send", el).addEventListener("click", () => {
       const subject = `Reporte ministerial ${mName} · ${K.churchShort()}`;
-      K.sheet(`${K.head("Enviar reporte")}<p class="muted">Elija cómo enviarlo. Kaleos lo deja marcado como enviado.</p>
+      const canMark = K.me.role === "pastor"; // la base solo deja al pastor marcarlo como enviado
+      K.sheet(`${K.head("Enviar reporte")}<p class="muted">Elija cómo enviarlo.${canMark ? " Kaleos lo deja marcado como enviado." : ""}</p>
         <a class="btn block" data-mark target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">${ic("chat", "sm")}Enviar por WhatsApp</a>
         <a class="btn sec block" data-mark href="mailto:${esc(ch.supervisor_email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}">Enviar por correo${ch.supervisor_email ? "" : " (falta el correo del supervisor)"}</a>
         <button class="btn sec block" id="cp">Copiar texto</button>`, (s, close) => {
         const mark = async () => {
-          await K.sb.from("kaleos_reports").upsert({ church_id: K.me.church_id, month: month + "-01", data: r, sent_at: new Date().toISOString(), sent_by: K.me.id }, { onConflict: "church_id,month" });
+          if (!canMark) return close();
+          const { error } = await K.sb.from("kaleos_reports").upsert({ church_id: K.me.church_id, month: month + "-01", data: r, sent_at: new Date().toISOString(), sent_by: K.me.id }, { onConflict: "church_id,month" });
+          if (error) return K.toast(K.errMsg(error), 4000);
           close(); setTimeout(() => K.mount(el, K.viewReport, month), 400);
         };
         K.on(s, "[data-mark]", mark);
-        $("#cp", s).addEventListener("click", () => navigator.clipboard.writeText(text).then(() => { K.toast("Reporte copiado"); mark(); }));
+        $("#cp", s).addEventListener("click", () => K.copy(text, "Reporte copiado").then((ok) => ok && mark()));
       });
     });
   };
