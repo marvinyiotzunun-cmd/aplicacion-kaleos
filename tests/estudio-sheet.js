@@ -1,13 +1,13 @@
 // Hojas de muestra del Estudio: dibuja cada plantilla × tema × pieza con textos cortos y largos,
 // revisa que ningún texto se salga de la imagen y guarda una hoja PNG por plantilla.
-//   node tests/estudio-sheet.js [carpeta-salida] [filtro-de-plantilla-o-familia] [--photo]
+//   node tests/estudio-sheet.js [carpeta-salida] [filtro-de-plantilla-o-familia] [--photo | --photo=<archivo de docs/img/fotos>]
 // Sale con código 1 si alguna plantilla lanza un error o saca texto fuera de la imagen.
 const http = require("http"), fs = require("fs"), path = require("path");
 const { chromium } = require("playwright");
 const ROOT = path.join(__dirname, "..", "docs");
 const OUT = path.resolve(process.argv[2] || path.join(__dirname, "shots", "estudio"));
 const FILTER = process.argv[3] && !process.argv[3].startsWith("--") ? process.argv[3] : "";
-const PHOTO = process.argv.includes("--photo");
+const PHOTO_ARG = process.argv.find((a) => a.startsWith("--photo")), PHOTO = !!PHOTO_ARG, PHOTO_FILE = PHOTO_ARG && PHOTO_ARG.includes("=") ? PHOTO_ARG.split("=")[1] : "";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".jpg": "image/jpeg" };
 const families = fs.readdirSync(path.join(ROOT, "js", "estudio")).filter((f) => f.endsWith(".js")).sort();
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#888">
@@ -28,13 +28,14 @@ ${families.map((f) => `<script src="/js/estudio/${f}"></script>`).join("\n")}
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1400, height: 900 } });
   const errs = []; p.on("pageerror", (e) => errs.push(e.message)); p.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
   await p.goto(`http://localhost:${srv.address().port}/__sheet`);
-  const res = await p.evaluate(async ({ FILTER, PHOTO }) => {
+  const res = await p.evaluate(async ({ FILTER, PHOTO, PHOTO_FILE }) => {
     const E = K.EST, load = (s) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = s; });
     E.setAssets({ logo: await load("/img/logo.png"), markW: await load("/img/mark-w.png") });
     await E.ready(); await document.fonts.ready;
     // foto de prueba (paisaje dibujado) para las plantillas con foto
     let photo = null;
-    if (PHOTO) {
+    if (PHOTO && PHOTO_FILE) photo = await load("/img/fotos/" + PHOTO_FILE);
+    else if (PHOTO) {
       const c = document.createElement("canvas"); c.width = 1600; c.height = 1100; const x = c.getContext("2d");
       const sky = x.createLinearGradient(0, 0, 0, 700); sky.addColorStop(0, "#6f9fd0"); sky.addColorStop(1, "#f1d6a6"); x.fillStyle = sky; x.fillRect(0, 0, 1600, 1100);
       x.fillStyle = "#4b5d48"; x.beginPath(); x.moveTo(0, 720); for (let i = 0; i <= 16; i++) x.lineTo(i * 100, 560 + Math.sin(i * 1.3) * 90 + (i % 3) * 30); x.lineTo(1600, 1100); x.lineTo(0, 1100); x.fill();
@@ -103,7 +104,7 @@ ${families.map((f) => `<script src="/js/estudio/${f}"></script>`).join("\n")}
       big.push({ id: t.id, png: row.toDataURL("image/jpeg", 0.82) });
     }
     return { out, big, issues, count: { card: E.count("card"), ann: E.count("ann"), verse: E.count("verse") }, templates: Object.keys(E.T).length };
-  }, { FILTER, PHOTO });
+  }, { FILTER, PHOTO, PHOTO_FILE });
   for (const o of res.out) fs.writeFileSync(path.join(OUT, `${o.id}${PHOTO ? "-foto" : ""}.png`), Buffer.from(o.png.split(",")[1], "base64"));
   for (const o of res.big) fs.writeFileSync(path.join(OUT, `${o.id}${PHOTO ? "-foto" : ""}-grande.jpg`), Buffer.from(o.png.split(",")[1], "base64"));
   console.log(`Plantillas: ${res.templates} · diseños: tarjetas ${res.count.card}, avisos ${res.count.ann}, versículos ${res.count.verse}`);
