@@ -575,3 +575,13 @@ a.li{text-decoration:none;color:inherit}
 .voz.min .vbtn .ic{width:18px;height:18px}
 .ctl-view .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ctl-view .panels,.ctl-view .pgrid{grid-template-columns:minmax(0,1fr)}
+
+/* Campañas */
+.cthumb{width:64px;height:64px;border-radius:10px;flex:none;box-shadow:var(--shadow-s)}
+.cgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+@media (min-width:700px){.cgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.cpiece{display:flex;flex-direction:column;gap:8px;text-align:left;min-width:0}
+.cpiece canvas{width:100%;height:auto;border-radius:12px;display:block;background:var(--surface-3);box-shadow:var(--shadow-s)}
+.cpiece .cn{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.cpiece .cn b{font-weight:600;font-size:14px}
+.cback{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:14px;color:var(--ink-2);padding:4px 0}
