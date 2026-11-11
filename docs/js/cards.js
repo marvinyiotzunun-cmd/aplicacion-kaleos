@@ -47,6 +47,28 @@
     return n === 0 ? "hoy" : n === 1 ? "mañana" : n === -1 ? "ayer" : n > 0 ? `en ${n} días` : `hace ${-n} días`;
   });
   const yrs = (n) => `${n} ${n === 1 ? "año" : "años"}`;
+  // Cómo lo llama el pastor: «hermana Ana», «hermano Luis», «pastora Rut»
+  const isWoman = (m) => /^(Hna\.|Pastora)$/.test((m && m.title) || "");
+  K.trato = (m) => {
+    const t = (m && m.title) || "", f = K.first(m && m.full_name);
+    return ({ "Hno.": "hermano ", "Hna.": "hermana ", Pastor: "pastor ", Pastora: "pastora ", Joven: "joven " }[t] || "") + f;
+  };
+  // La plantilla que la iglesia ya usa: rosa para ellas y azul para ellos (cumpleaños)
+  // Con el Estudio: un diseño hecho a mano distinto para cada hermano (siempre el mismo para la misma persona)
+  const EST_DEF = {
+    cumple_h: ["fie-globos:marino", "tip-cartel:marino", "fie-escarapela:marino", "fie-confeti:marino", "pap-boleto:marino", "fie-picado:marino", "tip-setentas:marino", "man-pizarra:verde"],
+    cumple_m: ["fie-globos:rosa", "man-acuarela:rosa", "fie-escarapela:rosa", "fie-pastel:fresa", "edi-invitacion:rosa", "man-ramita:rosa", "fie-picado:crema", "pap-marbete:rosa"],
+    bodas: ["edi-invitacion:linea", "sag-estampita:marino", "man-ramita:salvia", "edi-invitacion:marfil", "sag-sello:marino"],
+    otro: ["edi-revista:marino", "fie-memphis:crema", "man-carta:kraft", "pap-postal:crema", "tip-periodico:papel"],
+  };
+  K.defaultTpl = (kind, m) => {
+    if (K.EST && Object.keys(K.EST.T).length) {
+      const set = kind === "cumple" ? (isWoman(m) ? EST_DEF.cumple_m : EST_DEF.cumple_h) : kind === "bodas" ? EST_DEF.bodas : EST_DEF.otro;
+      const ok = set.filter((x) => K.EST.T[x.split(":")[0]]);
+      if (ok.length) return "e:" + ok[hashStr((m && (m.id || m.full_name)) || "k") % ok.length];
+    }
+    return kind === "cumple" ? (isWoman(m) ? "rosa" : "azul") : OCCASIONS[kind].tpl;
+  };
   function hashStr(s) {
     let h = 2166136261;
     for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); }
@@ -67,19 +89,19 @@
   K.occasionsFor = (members, specials, from = -3, to = 14) => {
     const out = [], t = K.today();
     for (let i = from; i <= to; i++) {
-      const d = K.addDays(t, i), md = d.slice(5), y = Number(d.slice(0, 4));
+      const d = K.addDays(t, i), y = Number(d.slice(0, 4));
       for (const m of members) {
         if (!m.active || m.id === K.me.id) continue;
-        if (m.birthday && String(m.birthday).slice(5, 10) === md) out.push({ kind: "cumple", key: "cumple", date: d, m });
+        if (m.birthday && K.sameMD(m.birthday, d)) out.push({ kind: "cumple", key: "cumple", date: d, m });
         for (const [kind, f] of [["bautismo", "baptism_date"], ["iglesia", "member_since"], ["bodas", "wedding_date"]]) {
           const v = m[f] && String(m[f]);
-          if (v && v.slice(5, 10) === md && y > Number(v.slice(0, 4))) out.push({ kind, key: kind, date: d, m, years: y - Number(v.slice(0, 4)) });
+          if (v && K.sameMD(v, d) && y > Number(v.slice(0, 4))) out.push({ kind, key: kind, date: d, m, years: y - Number(v.slice(0, 4)) });
         }
       }
       for (const sp of specials) {
         const m = members.find((x) => x.id === sp.profile_id), v = String(sp.event_date);
         if (!m || !m.active) continue;
-        if (sp.yearly ? v.slice(5, 10) === md && y >= Number(v.slice(0, 4)) : v === d)
+        if (sp.yearly ? K.sameMD(v, d) && y >= Number(v.slice(0, 4)) : v === d)
           out.push({ kind: "especial", key: "especial:" + sp.id, date: d, m, label: sp.label, years: sp.yearly ? y - Number(v.slice(0, 4)) : 0 });
       }
     }
@@ -94,7 +116,7 @@
       cumple: [K.fmtDate(o.date, "dm"), "¡Feliz cumpleaños!", "Damos gracias a Dios por su vida"],
       bautismo: ["Aniversario de bautismo", "Vida nueva", `${yrs(n)} de su bautismo`],
       iglesia: ["Aniversario en la iglesia", "¡Gracias!", `${yrs(n)} siendo parte de nuestra familia`],
-      bodas: ["Aniversario de bodas", "¡Feliz aniversario!", `${yrs(n)} de matrimonio junto a su ${/^(Hna\.|Pastora)$/.test(o.m.title || "") ? "esposo" : "esposa"}`],
+      bodas: ["Aniversario de bodas", "¡Feliz aniversario!", `${yrs(n)} de matrimonio junto a su ${isWoman(o.m) ? "esposo" : "esposa"}`],
       especial: [o.label || "Fecha especial", "¡Felicidades!", n > 0 ? `${yrs(n)} de este día especial` : "Celebramos con usted este día"],
     }[o.kind];
     const vs = GREET_VERSES[o.kind], v = vs[(hashStr(o.m.id + o.date) + vi) % vs.length];
@@ -102,14 +124,15 @@
       verse: v[0], ref: v[1], date: o.date, signature: greetSignature(), from: `y toda la familia de ${short}`,
       church: `Iglesia de Dios E.C. · ${short}`, seed: o.m.id + o.key + o.date };
   }
+  // En el tono del pastor en WhatsApp: cercano, con exclamaciones, «con usted y familia», sin firma (lo manda desde su teléfono)
   function greetMessage(o) {
-    const first = K.first(o.m.full_name), sig = greetSignature(), igl = K.churchShort(), n = o.years;
+    const who = K.trato(o.m), igl = K.churchShort(), n = o.years, [vt, vr] = (() => { const c = cardText(o); return [c.verse, c.ref]; })();
     return {
-      cumple: `¡Feliz cumpleaños, ${first}! 🎂\n\nHoy damos gracias a Dios por su vida. Que el Señor le bendiga y le guarde en este nuevo año.\n\nCon cariño,\n${sig} y la familia de ${igl}`,
-      bautismo: `¡Bendiciones, ${first}! 🕊️\n\nHoy se cumplen ${yrs(n)} de su bautismo. Damos gracias a Dios por su fidelidad y por la vida nueva que tiene en Cristo.\n\nCon cariño,\n${sig}`,
-      iglesia: `${first}, hoy cumple ${yrs(n)} siendo parte de la familia de ${igl}. ⛪\n\nGracias por su fidelidad, su servicio y su cariño. Que Dios le siga bendiciendo.\n\nCon cariño,\n${sig}`,
-      bodas: `¡Feliz aniversario de bodas, ${first}! 💍\n\nHoy celebramos ${yrs(n)} de matrimonio. Que el Señor siga siendo el centro de su hogar.\n\nCon cariño,\n${sig} y la familia de ${igl}`,
-      especial: `¡Felicidades, ${first}! ⭐\n\nHoy celebramos con usted: ${o.label || "un día especial"}. Que Dios le bendiga grandemente.\n\nCon cariño,\n${sig}`,
+      cumple: `¡Feliz cumpleaños ${who}! 🎉\n\nDando gracias a Dios por su vida. Que la gracia y la paz de nuestro Señor Jesucristo estén siempre con usted y familia.\n\n«${vt}» ${vr}\n\n¡Bendiciones de parte de toda la iglesia ${igl}!`,
+      bautismo: `¡Bendiciones ${who}!\n\nHoy se cumplen ${yrs(n)} de su bautismo. Damos gracias a Dios por su fidelidad y por la vida nueva que tiene en Cristo. ¡Sigamos adelante!\n\n«${vt}» ${vr}`,
+      iglesia: `¡Bendiciones ${who}!\n\nHoy cumple ${yrs(n)} siendo parte de la familia de ${igl}. Gracias por su fidelidad, su servicio y su cariño. ¡Que Dios le recompense según la obra que realiza!\n\n«${vt}» ${vr}`,
+      bodas: `¡Feliz aniversario de bodas ${who}! 🤍\n\nHoy celebramos ${yrs(n)} de matrimonio. Que el Señor siga siendo el centro de su hogar, con usted y familia.\n\n«${vt}» ${vr}\n\n¡Felicitaciones de parte de toda la iglesia ${igl}!`,
+      especial: `¡Felicidades ${who}! ✨\n\nHoy celebramos con usted: ${o.label || "un día especial"}. ¡Que Dios le bendiga grandemente!\n\n«${vt}» ${vr}`,
     }[o.kind];
   }
 
@@ -121,8 +144,10 @@
   const loadImg = (src) => new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
   K.cardReady = async () => {
     if (assets) return assets;
+    if (K.EST) { K.EST.ready(); if (K.EST.loadFotos) K.EST.loadFotos(); }
     try { await Promise.all([`600 80px ${SERIF}`, `italic 500 40px ${SERIF}`, `80px ${SCRIPT}`, `700 30px ${SANS}`, `800 30px ${SANS}`].map((f) => document.fonts.load(f))); } catch (_) {}
     const [logo, markW] = await Promise.all(["./img/logo.png", "./img/mark-w.png"].map(loadImg));
+    if (K.EST) K.EST.setAssets({ logo, markW });
     return (assets = { logo, markW });
   };
   function fitFont(ctx, text, font, size, maxW, maxLines, minSize) {
@@ -293,12 +318,112 @@
         bar: (cx, y0, y1) => { cx.fillStyle = GOLD; cx.fillRect(X, y0 - 30, 4, y1 - y0 + 14); } });
       drawSig(ctx, c, X, "left", "#1E2747", GOLD_D);
     } },
+    // las de cumpleaños como las publica La Línea: azul para los hermanos, rosa para las hermanas, confeti y el logo abajo al centro
+    azul: { name: "Azul La Línea", draw(ctx, c, a, R) { lineaCard(ctx, c, a, R, ["#0d1b3d", "#1f3f7a", "#2d5fa8"], ["#F2C85B", "#FFFFFF", "#9cc3f0", "#E8D3A0"]); } },
+    rosa: { name: "Rosa La Línea", draw(ctx, c, a, R) { lineaCard(ctx, c, a, R, ["#4a0f2e", "#9c2a62", "#d9578f"], ["#F2C85B", "#FFFFFF", "#ffc2dc", "#E8D3A0"]); } },
   });
-  K.renderCard = (canvas, tpl, c) => {
+  function lineaCard(ctx, c, a, R, [g0, g1, g2], conf) {
+    const g = ctx.createLinearGradient(0, 0, CW * 0.4, CH);
+    g.addColorStop(0, g0); g.addColorStop(0.55, g1); g.addColorStop(1, g2);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+    const rg = ctx.createRadialGradient(CW / 2, CH * 0.36, 40, CW / 2, CH * 0.36, CH * 0.6);
+    rg.addColorStop(0, "rgba(255,255,255,.18)"); rg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, CW, CH);
+    for (let i = 0; i < 140; i++) {
+      const top = R() < 0.6, x = R() * CW, y = top ? R() * 260 : CH - 120 - R() * 160;
+      if (!top && Math.abs(x - CW / 2) < 170) continue;
+      if (top && y > 80 && y < 150 && Math.abs(x - CW / 2) < 340) continue;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(R() * Math.PI); ctx.globalAlpha = 0.5 + R() * 0.5;
+      ctx.fillStyle = conf[Math.floor(R() * conf.length)];
+      const sz = 7 + R() * 14;
+      if (R() < 0.35) { ctx.beginPath(); ctx.arc(0, 0, sz / 2.4, 0, Math.PI * 2); ctx.fill(); } else ctx.fillRect(-sz / 2, -sz / 5, sz, sz / 2.5);
+      ctx.restore();
+    }
+    ctx.strokeStyle = "rgba(242,200,91,.85)"; ctx.lineWidth = 3; ctx.strokeRect(46, 46, CW - 92, CH - 92);
+    ctx.font = `700 20px ${SANS}`; ctx.fillStyle = "#F2C85B"; ctx.textAlign = "center"; spaced(ctx, c.church.toUpperCase(), CW / 2, 120, 6);
+    composeText(ctx, c, { x: CW / 2, align: "center", maxW: 880, verseW: 800, top: 160, bottom: 1000, headSize: 150,
+      kicker: "#F2C85B", head: "#fff", name: "#fff", line: "rgba(255,255,255,.88)", verse: "#fff4dc", ref: "#F2C85B", rule: ruleCenter("#F2C85B") });
+    drawSig(ctx, c, CW / 2, "center", "#fff", "#F2C85B", CH - 250);
+    drawLogo(ctx, a.markW, CW / 2, CH - 168, 96);
+  }
+  // ===== diseños Kaleos: fondo (13 estilos) × color (17) × marco (5) = 1.105 tarjetas, más las 6 clásicas =====
+  const FRAMES = (K.CARD_FRAMES = { filete: "Filete", esquinas: "Esquinas", arco: "Arco", panel: "Panel", lateral: "Lateral" });
+  K.CARD_DESIGNS = Object.keys(K.ART_KINDS).length * Object.keys(K.PAL).length * Object.keys(FRAMES).length + Object.keys(TEMPLATES).length;
+  const parseD = (tpl) => { const [, k, p, f] = String(tpl).split(":"); return { k: K.ART_KINDS[k] ? k : "luz", p: K.PAL[p] ? p : "linea", f: FRAMES[f] ? f : "filete" }; };
+  K.designTpl = (k, p, f) => `d:${k}:${p}:${f}`;
+  K.isDesign = (tpl) => /^d:/.test(String(tpl || ""));
+  K.designOf = parseD;
+  function designCard(ctx, c, a, R, tpl) {
+    const { k, p, f } = parseD(tpl), light = K.isLight(p), P = K.PAL[p], acc = light ? GOLD_D : P[2];
+    K.art(ctx, CW, CH, { kind: k, pal: p, seed: 1 + (hashStr(c.seed) % 90) });
+    const paneled = f === "arco" || f === "panel";
+    const darkText = paneled || light;
+    if (!paneled) {
+      // velo para que el texto se lea sobre cualquier fondo
+      const v = ctx.createRadialGradient(CW / 2, CH * 0.5, 120, CW / 2, CH * 0.5, CH * 0.75);
+      v.addColorStop(0, light ? "rgba(255,252,244,.55)" : "rgba(6,8,20,.42)"); v.addColorStop(1, light ? "rgba(255,252,244,.2)" : "rgba(6,8,20,.15)");
+      ctx.fillStyle = v; ctx.fillRect(0, 0, CW, CH);
+    }
+    const col = darkText
+      ? { kicker: GOLD_D, head: "#1E2650", name: "#1E2747", line: "#4F5874", verse: "#36406a", ref: GOLD_D, sig: "#1E2747", sub: GOLD_D, rule: GOLD }
+      : { kicker: acc, head: "#fff", name: "#fff", line: "rgba(255,255,255,.86)", verse: "#fff7e6", ref: acc, sig: "#fff", sub: acc, rule: acc };
+    const logo = darkText ? a.logo : a.markW;
+    const base = { kicker: col.kicker, head: col.head, name: col.name, line: col.line, verse: col.verse, ref: col.ref };
+    if (f === "filete" || f === "esquinas") {
+      ctx.strokeStyle = acc;
+      if (f === "filete") {
+        ctx.lineWidth = 3; ctx.strokeRect(54, 54, CW - 108, CH - 108);
+        ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5; ctx.strokeRect(72, 72, CW - 144, CH - 144); ctx.globalAlpha = 1;
+        for (const [x, y] of [[54, 54], [CW - 54, 54], [54, CH - 54], [CW - 54, CH - 54]]) diamond(ctx, x, y, 12, acc);
+      } else {
+        ctx.lineWidth = 4; const L = 150, m = 60;
+        for (const [x, y, sx, sy] of [[m, m, 1, 1], [CW - m, m, -1, 1], [m, CH - m, 1, -1], [CW - m, CH - m, -1, -1]]) {
+          ctx.beginPath(); ctx.moveTo(x, y + sy * L); ctx.lineTo(x, y); ctx.lineTo(x + sx * L, y); ctx.stroke();
+          ctx.beginPath(); ctx.arc(x + sx * 22, y + sy * 22, 6, 0, Math.PI * 2); ctx.fillStyle = acc; ctx.fill();
+        }
+      }
+      drawLogo(ctx, logo, CW / 2, 112, 100);
+      ctx.font = `700 20px ${SANS}`; ctx.fillStyle = col.sub; ctx.textAlign = "center"; spaced(ctx, c.church.toUpperCase(), CW / 2, 256, 6);
+      composeText(ctx, c, { ...base, x: CW / 2, align: "center", maxW: 860, verseW: 780, top: 290, bottom: 1085, rule: ruleCenter(col.rule) });
+      drawSig(ctx, c, CW / 2, "center", col.sig, col.sub);
+    } else if (f === "arco") {
+      const ax = 96, ay = 90, aw = CW - 192, ah = CH - 180;
+      ctx.save(); ctx.shadowColor = "rgba(0,0,0,.28)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 14;
+      archPath(ctx, ax, ay, aw, ah); ctx.fillStyle = "rgba(255,253,248,.94)"; ctx.fill(); ctx.restore();
+      archPath(ctx, ax + 18, ay + 18, aw - 36, ah - 36); ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; ctx.stroke();
+      drawLogo(ctx, a.logo, CW / 2, 175, 92);
+      composeText(ctx, c, { ...base, x: CW / 2, align: "center", maxW: 720, verseW: 690, top: 300, bottom: 1060, rule: ruleCenter(GOLD) });
+      drawSig(ctx, c, CW / 2, "center", col.sig, col.sub, CH - 210);
+    } else if (f === "panel") {
+      const px = 100, py = 150, pw = CW - 200, ph = CH - 300, r = 36;
+      ctx.save(); ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 44; ctx.shadowOffsetY = 12;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(px, py, pw, ph, r) : ctx.rect(px, py, pw, ph); ctx.fillStyle = "rgba(255,253,248,.93)"; ctx.fill(); ctx.restore();
+      ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(px + 16, py + 16, pw - 32, ph - 32, r - 10) : ctx.rect(px + 16, py + 16, pw - 32, ph - 32); ctx.stroke();
+      drawLogo(ctx, light ? a.logo : a.markW, CW / 2, 40, 86);
+      composeText(ctx, c, { ...base, x: CW / 2, align: "center", maxW: 740, verseW: 700, top: 200, bottom: CH - 330, rule: ruleCenter(GOLD) });
+      drawSig(ctx, c, CW / 2, "center", col.sig, col.sub, CH - 250);
+    } else {
+      const X = 130;
+      ctx.fillStyle = acc; ctx.fillRect(70, 70, 6, CH - 140);
+      drawLogo(ctx, logo, X, 96, 88, "left");
+      composeText(ctx, c, { ...base, x: X, align: "left", maxW: 800, verseX: X + 34, verseW: 740, top: 250, bottom: 1080, rule: ruleLeft(col.rule),
+        bar: (cx, y0, y1) => { cx.fillStyle = acc; cx.fillRect(X, y0 - 30, 4, y1 - y0 + 14); } });
+      drawSig(ctx, c, X, "left", col.sig, col.sub);
+    }
+  }
+  K.renderCard = (canvas, tpl, c, photo) => {
+    if (K.EST && K.EST.is(tpl) && K.EST.parse(tpl)) return K.EST.render(canvas, "card", tpl, c, { seed: c.seed, photo });
     canvas.width = CW; canvas.height = CH;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, CW, CH);
-    (TEMPLATES[tpl] || TEMPLATES.noche).draw(ctx, c, assets, rng(hashStr(c.seed)));
+    const R = rng(hashStr(c.seed));
+    if (K.isDesign(tpl)) return designCard(ctx, c, assets, R, tpl);
+    (TEMPLATES[tpl] || TEMPLATES.noche).draw(ctx, c, assets, R);
+  };
+  K.randomDesign = (exclude) => {
+    const ks = Object.keys(K.ART_KINDS), ps = Object.keys(K.PAL), fs = Object.keys(FRAMES);
+    for (let i = 0; i < 6; i++) { const t = K.designTpl(ks[Math.floor(Math.random() * ks.length)], ps[Math.floor(Math.random() * ps.length)], fs[Math.floor(Math.random() * fs.length)]); if (t !== exclude) return t; }
+    return K.designTpl("luz", "linea", "filete");
   };
 
   // Medio real para un hermano: su preferido si tiene el dato; si no, el que tenga; si no, solo Kaleos
@@ -319,23 +444,41 @@
     let to = opt.to;
     const { data } = await K.sb.from("kaleos_profiles").select("*").eq("id", to.id).maybeSingle();
     if (data) to = data;
-    let tpl = opt.tpl, vi = 0, file = null, edited = false;
+    let tpl = opt.tpl, vi = 0, file = null, edited = false, photo, picker = null, drawN = 0;
+    const est = !!(K.EST && Object.keys(K.EST.T).length);
+    let estKey = est ? (K.EST.is(tpl) ? tpl : K.EST.random("card")) : "";
+    const dz = K.isDesign(tpl) ? K.designOf(tpl) : { k: "luz", p: "linea", f: "filete" };
     const slug = K.first(to.full_name).normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "kaleos", fname = `tarjeta-${slug}.png`;
     K.sheet(`${K.head(opt.title, opt.eyebrow)}
       <canvas class="gcard" aria-label="Vista previa de la tarjeta"></canvas>
-      <div class="chips">${Object.entries(TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join("")}
+      <div class="chips">${est ? `<button class="chip" data-tpl="estudio">${ic("estrella")}Estudio</button>` : ""}${Object.entries(TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join("")}
+        <button class="chip" data-tpl="design">${ic("editar")}Diseños Kaleos</button>
         <button class="chip" id="ov">${ic("versiculos")}Otro versículo</button></div>
+      <div class="dzbox" id="estp" hidden></div>
+      <div class="dzbox" id="dz" hidden>
+        <div class="grid3"><div class="field"><label for="dzk">Fondo</label><select class="inp" id="dzk">${Object.entries(K.ART_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+          <div class="field"><label for="dzp">Color</label><select class="inp" id="dzp">${Object.keys(K.PAL).map((p) => `<option value="${p}">${K.PAL_NAMES[p]}</option>`).join("")}</select></div>
+          <div class="field"><label for="dzf">Marco</label><select class="inp" id="dzf">${Object.entries(FRAMES).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div></div>
+        <button class="btn sec sm block" id="dzr">${ic("estrella", "sm")}Sorpréndame con otro diseño</button>
+        <p class="fine" style="text-align:center;margin:6px 0 0">${K.CARD_DESIGNS.toLocaleString("es-GT")} diseños posibles</p></div>
       <div class="field"><label for="gm">Mensaje que acompaña la tarjeta</label><textarea class="inp" id="gm" rows="7"></textarea></div>
       ${opt.sent ? `<div class="result"><span class="dot">${ic("check", "sm")}</span><div>Ya se envió<span class="s">${new Date(opt.sent).toLocaleString("es-GT", { timeZone: K.TZ, dateStyle: "medium", timeStyle: "short" })}</span></div></div>` : ""}
       <button class="btn gold block" id="go">${ic("send", "sm")}Enviar</button>
       <p class="fine" id="how" style="text-align:center"></p>
       <button class="linkbtn" id="gd">Descargar la imagen</button>`, (s, close) => {
       const cv = $(".gcard", s), gm = $("#gm", s);
-      const draw = () => {
-        file = null;
-        K.renderCard(cv, tpl, opt.card(vi));
-        $$("[data-tpl]", s).forEach((b) => b.classList.toggle("on", b.dataset.tpl === tpl));
-        cv.toBlob((b) => { if (b) file = new File([b], fname, { type: "image/png" }); }, "image/png");
+      const sync = () => { $("#dzk", s).value = dz.k; $("#dzp", s).value = dz.p; $("#dzf", s).value = dz.f; };
+      const draw = async () => {
+        file = null; const n = ++drawN;
+        const isD = K.isDesign(tpl), isE = est && K.EST.is(tpl);
+        $$("[data-tpl]", s).forEach((b) => b.classList.toggle("on", isE ? b.dataset.tpl === "estudio" : isD ? b.dataset.tpl === "design" : b.dataset.tpl === tpl));
+        $("#dz", s).hidden = !isD; if (isD) sync();
+        $("#estp", s).hidden = !isE;
+        if (isE && !picker) picker = K.estPicker($("#estp", s), { kind: "card", value: () => estKey, sample: () => opt.card(vi), pick: (k, ph) => { estKey = tpl = k; photo = ph; draw(); } });
+        if (isE) await K.EST.prepare(tpl);
+        if (n !== drawN) return;
+        K.renderCard(cv, tpl, opt.card(vi), photo);
+        cv.toBlob((b) => { if (b && n === drawN) file = new File([b], fname, { type: "image/png" }); }, "image/png");
         if (!edited) gm.value = opt.message();
         $("#how", s).innerHTML = deliveryNote(to);
       };
@@ -345,8 +488,10 @@
         document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       };
       gm.addEventListener("input", () => { edited = true; });
-      K.on(s, "[data-tpl]", (b) => { tpl = b.dataset.tpl; draw(); });
-      $("#ov", s).addEventListener("click", () => { vi++; draw(); });
+      K.on(s, "[data-tpl]", (b) => { tpl = b.dataset.tpl === "design" ? K.designTpl(dz.k, dz.p, dz.f) : b.dataset.tpl === "estudio" ? estKey : b.dataset.tpl; draw(); });
+      ["dzk", "dzp", "dzf"].forEach((id) => $("#" + id, s).addEventListener("change", () => { dz[{ dzk: "k", dzp: "p", dzf: "f" }[id]] = $("#" + id, s).value; tpl = K.designTpl(dz.k, dz.p, dz.f); draw(); }));
+      $("#dzr", s).addEventListener("click", () => { tpl = K.randomDesign(tpl); Object.assign(dz, K.designOf(tpl)); draw(); });
+      $("#ov", s).addEventListener("click", () => { vi++; draw(); if (picker) picker.refresh(); });
       $("#gd", s).addEventListener("click", download);
       $("#go", s).addEventListener("click", async (e) => {
         if (!file) return K.toast("Un momento, la tarjeta se está preparando…");
@@ -374,7 +519,7 @@
 
   K.greetSheet = (o, after) => K.sendCard({
     title: o.m.full_name, eyebrow: `${o.label || OCCASIONS[o.kind].name}${o.years ? " · " + yrs(o.years) : ""} · ${K.fmtDate(o.date, "dm")} (${whenLabel(o.date)})`,
-    tpl: OCCASIONS[o.kind].tpl, to: o.m, sent: o.sent, after,
+    tpl: K.defaultTpl(o.kind, o.m), to: o.m, sent: o.sent, after,
     card: (vi) => cardText(o, vi), message: () => greetMessage(o), msgTitle: o.label || OCCASIONS[o.kind].name,
     log: async (tpl, text) => {
       const { error } = await K.sb.from("kaleos_greetings").upsert({ church_id: K.me.church_id, profile_id: o.m.id, occasion: o.key,
@@ -384,9 +529,9 @@
   });
   // Felicitar a alguien que cumple años (desde el asistente o la agenda)
   K.greetBirthday = (p, after) => {
-    const md = String(p.birthday).slice(5, 10), t = K.today();
-    let d = t.slice(0, 4) + "-" + md;
-    if (K.dayDiff(d, t) < -3) d = Number(t.slice(0, 4)) + 1 + "-" + md;
+    const t = K.today(), on = (y) => { const md = String(p.birthday).slice(5, 10), leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0); return `${y}-${md === "02-29" && !leap ? "02-28" : md}`; };
+    let d = on(+t.slice(0, 4));
+    if (K.dayDiff(d, t) < -3) d = on(+t.slice(0, 4) + 1);
     return K.greetSheet({ kind: "cumple", key: "cumple", date: d, m: p }, after);
   };
 
@@ -443,8 +588,8 @@
 
   // ===== mensaje guardado con tarjeta (en «Mis mensajes») =====
   K.drawMessageCard = async (cv, x) => {
-    if (x.card) { await K.cardReady(); K.renderCard(cv, x.card.tpl, x.card.c); return true; }
-    if (x.event_at || x.art) { K.drawAnn(cv, x); return true; }
+    if (x.card) { await K.cardReady(); if (K.EST && K.EST.is(x.card.tpl)) await K.EST.prepare(x.card.tpl); K.renderCard(cv, x.card.tpl, x.card.c); return true; }
+    if (x.event_at || x.art) { if (K.EST && x.art && x.art.e) { await K.cardReady(); await K.EST.prepare(K.EST.key(x.art.e, x.art.t, x.art.f)); } K.drawAnn(cv, x); return true; }
     return false;
   };
 
@@ -454,18 +599,24 @@
     const p = opt.prefill || {};
     const comms = await K.communities();
     const pals = Object.keys(K.PAL), kinds = Object.keys(K.ART_KINDS);
-    const st = { kind: p.kind || "invitacion", pal: p.pal || "oro", style: p.style || "luz", seed: 1 + Math.floor(Math.random() * 90),
+    const est = !!(K.EST && Object.keys(K.EST.T).length);
+    if (est) { try { await K.cardReady(); } catch (_) {} }
+    const st = { mode: est ? "estudio" : "clasico", est: est ? (p.est && K.EST.is(p.est) ? p.est : K.EST.random("ann")) : "", photo: undefined,
+      kind: p.kind || "invitacion", pal: p.pal || "linea", style: p.style || "luz", layout: p.layout || "fecha", seed: 1 + Math.floor(Math.random() * 90),
       aud: p.community ? "c:" + (comms.find((c) => c.slug === p.community || c.id === p.community)?.id || "") : p.levels ? "lv" : "all",
       levels: p.levels || [] };
     if (st.aud === "c:") st.aud = "all";
     const when = p.when ? new Date(p.when) : null;
-    const dDate = when ? when.toLocaleDateString("en-CA", { timeZone: K.TZ }) : "";
-    const dTime = when ? when.toLocaleTimeString("en-GB", { timeZone: K.TZ, hour: "2-digit", minute: "2-digit" }) : "";
+    const dDate = when && !isNaN(when) ? when.toLocaleDateString("en-CA", { timeZone: K.TZ }) : p.date || "";
+    const dTime = when && !isNaN(when) ? when.toLocaleTimeString("en-GB", { timeZone: K.TZ, hour: "2-digit", minute: "2-digit" }) : p.time || "";
+    const pieces = opt.prefill ? [] : K.PIECES();
+    const nDesigns = Object.keys(K.ART_KINDS).length * pals.length * Object.keys(K.ANN_LAYOUTS).length;
     const audOpts = () => [{ v: "all", l: "Toda la iglesia", icon: "iglesia" }, { v: "lv", l: "Ciertos niveles", icon: "camino" }, { sep: 1 },
       ...comms.map((c) => ({ v: "c:" + c.id, l: c.name, s: c.members + " integrantes", icon: c.emblem }))];
     const make = K.drawer;
     make(`${K.head(opt.title || "Nuevo aviso", "Kaleos y WhatsApp")}
       <canvas class="gcard" id="ap" aria-label="Vista previa del aviso"></canvas>
+      ${pieces.length ? `<div class="field"><span class="flabel">Plantillas de la iglesia (con la fecha ya calculada)</span><div class="chips">${pieces.map((x, i) => `<button type="button" class="chip" data-pc="${i}">${esc(x.n)}</button>`).join("")}</div></div>` : ""}
       <div class="field"><span class="flabel">Tipo</span><div class="seg" id="ak">${["invitacion", "recordatorio", "aviso"].map((k) => `<button type="button" data-k="${k}" aria-pressed="${st.kind === k}">${K.MSG_KINDS[k].n}</button>`).join("")}</div></div>
       <div class="field"><label for="at">Título</label><input class="inp" id="at" value="${esc(p.title || "")}" placeholder="Vigilia de oración, Santa Cena…"></div>
       <div class="grid2"><div class="field"><label for="ad">Fecha</label><input class="inp" id="ad" type="date" value="${dDate}"></div>
@@ -473,23 +624,61 @@
       <div class="field"><label for="apl">Lugar</label><input class="inp" id="apl" value="${esc(p.place || "")}" placeholder="Templo central"></div>
       <div class="field"><span class="flabel">Para</span><div id="aud"></div><div class="chips" id="alv" ${st.aud === "lv" ? "" : "hidden"}>${K.LEVELS.map(([k, n]) => `<button type="button" class="chip" data-lv="${k}" aria-pressed="${st.levels.includes(k)}">${n}</button>`).join("")}</div></div>
       <div class="field"><label for="ab">Detalle</label><textarea class="inp" id="ab" placeholder="Lo que los hermanos deben saber">${esc(p.body || "")}</textarea></div>
-      <div class="field"><span class="flabel">Imagen</span><div class="pals">${pals.map((x) => `<button type="button" class="pal" data-p="${x}" aria-pressed="${st.pal === x}" aria-label="${K.PAL_NAMES[x]}" style="background:linear-gradient(135deg,${K.PAL[x][0]},${K.PAL[x][1]} 60%,${K.PAL[x][2]})"></button>`).join("")}</div>
-        <div class="seg" style="margin-top:8px">${kinds.map((k) => `<button type="button" data-s="${k}" aria-pressed="${st.style === k}">${K.ART_KINDS[k]}</button>`).join("")}</div></div>
+      <div class="field"><span class="flabel">Imagen</span>
+        ${est ? `<div class="seg" id="amode"><button type="button" data-am="estudio" aria-pressed="${st.mode === "estudio"}">Estudio</button><button type="button" data-am="clasico" aria-pressed="${st.mode === "clasico"}">Clásicos</button></div>
+        <div id="aest" style="margin-top:8px" ${st.mode === "estudio" ? "" : "hidden"}></div>` : ""}
+        <div id="aclas" ${st.mode === "estudio" ? "hidden" : ""}><div class="pals">${pals.map((x) => `<button type="button" class="pal" data-p="${x}" aria-pressed="${st.pal === x}" aria-label="${K.PAL_NAMES[x]}" style="background:linear-gradient(135deg,${K.PAL[x][0]},${K.PAL[x][1]} 60%,${K.PAL[x][2]})"></button>`).join("")}</div>
+        <div class="chips wrapsel" style="margin-top:8px">${kinds.map((k) => `<button type="button" class="chip" data-s="${k}" aria-pressed="${st.style === k}">${K.ART_KINDS[k]}</button>`).join("")}</div>
+        <div class="seg wrap" style="margin-top:8px">${Object.entries(K.ANN_LAYOUTS).map(([k, l]) => `<button type="button" data-l="${k}" aria-pressed="${st.layout === k}">${l}</button>`).join("")}</div>
+        <button type="button" class="btn sec sm" id="arnd" style="margin-top:8px">${ic("estrella", "sm")}Sorpréndame</button>
+        <p class="fine">${nDesigns.toLocaleString("es-GT")} diseños posibles.</p></div></div>
       <div class="row" style="margin-top:auto"><button class="btn sec" style="flex:1" data-close>Cancelar</button><button class="btn gold" style="flex:2" id="apub">${ic("send", "sm")}Publicar y compartir</button></div>`, (d, close) => {
       const cv = $("#ap", d), val = (id) => $("#" + id, d).value.trim();
       const eventAt = () => (val("ad") ? K.gtISO(val("ad"), val("ah") || "00:00") : null);
-      const obj = () => ({ id: 1, title: val("at") || K.MSG_KINDS[st.kind].n, event_at: eventAt(), place: val("apl"), art: { k: st.style, p: st.pal, s: st.seed } });
+      const estArt = () => { const q = K.EST.parse(st.est), f = K.EST.fotoOf(st.est); return { e: q.id, t: q.theme, ...(f ? { f } : {}) }; };
+      const obj = () => ({ id: 1, title: val("at") || K.MSG_KINDS[st.kind].n, event_at: eventAt(), place: val("apl"),
+        art: st.mode === "estudio" ? estArt() : { k: st.style, p: st.pal, s: st.seed, l: st.layout }, _photo: st.mode === "estudio" ? st.photo : undefined });
+      const mark = () => {
+        $$("[data-p]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.p === st.pal));
+        $$("[data-s]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.s === st.style));
+        $$("[data-l]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.l === st.layout));
+      };
       let t = 0;
       const prev = () => { clearTimeout(t); t = setTimeout(() => K.drawAnn(cv, obj()), 120); };
+      let picker = null;
+      const sample = () => { const o = obj(); return { ...o, title: val("at") || "Culto de oración" }; };
+      const showMode = () => {
+        if (!est) return;
+        $$("[data-am]", d).forEach((x) => x.setAttribute("aria-pressed", x.dataset.am === st.mode));
+        $("#aest", d).hidden = st.mode !== "estudio"; $("#aclas", d).hidden = st.mode === "estudio";
+        if (st.mode === "estudio" && !picker) picker = K.estPicker($("#aest", d), { kind: "ann", value: () => st.est, sample, pick: (k, ph) => { st.est = k; st.photo = ph; prev(); } });
+      };
+      if (est) { K.on(d, "[data-am]", (b) => { st.mode = b.dataset.am; showMode(); prev(); }); showMode(); }
       const drawAud = () => {
         $("#aud", d).innerHTML = K.dd("annAud", { icon: "avisos", options: audOpts, value: () => st.aud, pick: (v) => { st.aud = v; $("#alv", d).hidden = v !== "lv"; drawAud(); } });
       };
       drawAud();
       K.on(d, "[data-k]", (b) => { st.kind = b.dataset.k; $$("[data-k]", d).forEach((x) => x.setAttribute("aria-pressed", x === b)); });
       K.on(d, "[data-p]", (b) => { st.pal = b.dataset.p; $$("[data-p]", d).forEach((x) => x.setAttribute("aria-pressed", x === b)); prev(); });
-      K.on(d, "[data-s]", (b) => { st.style = b.dataset.s; st.seed = 1 + Math.floor(Math.random() * 90); $$("[data-s]", d).forEach((x) => x.setAttribute("aria-pressed", x === b)); prev(); });
+      K.on(d, "[data-s]", (b) => { st.style = b.dataset.s; st.seed = 1 + Math.floor(Math.random() * 90); mark(); prev(); });
+      K.on(d, "[data-l]", (b) => { st.layout = b.dataset.l; mark(); prev(); });
+      $("#arnd", d).addEventListener("click", () => {
+        const pick = (o) => { const ks = Object.keys(o); return ks[Math.floor(Math.random() * ks.length)]; };
+        st.style = pick(K.ART_KINDS); st.pal = pick(K.PAL); st.layout = pick(K.ANN_LAYOUTS); st.seed = 1 + Math.floor(Math.random() * 90); mark(); prev();
+      });
+      K.on(d, "[data-pc]", (b) => {
+        const x = pieces[+b.dataset.pc];
+        $("#at", d).value = x.title; $("#ab", d).value = x.body; $("#ad", d).value = x.date; $("#ah", d).value = x.time;
+        if (!$("#apl", d).value) $("#apl", d).value = "Templo " + K.churchShort();
+        Object.assign(st, { pal: x.pal, style: x.style, layout: x.layout, kind: x.date ? "invitacion" : "aviso" });
+        if (est && x.est && K.EST.parse(x.est)) { st.est = x.est; if (picker) { picker = null; showMode(); } }
+        $$("[data-k]", d).forEach((y) => y.setAttribute("aria-pressed", y.dataset.k === st.kind));
+        $$("[data-pc]", d).forEach((y) => y.classList.toggle("on", y === b));
+        mark(); prev();
+      });
       K.on(d, "[data-lv]", (b) => { const k = b.dataset.lv; st.levels = st.levels.includes(k) ? st.levels.filter((x) => x !== k) : [...st.levels, k]; b.setAttribute("aria-pressed", st.levels.includes(k)); });
-      ["at", "ad", "ah", "apl"].forEach((id) => $("#" + id, d).addEventListener("input", prev));
+      let rt = 0;
+      ["at", "ad", "ah", "apl"].forEach((id) => $("#" + id, d).addEventListener("input", () => { prev(); if (picker) { clearTimeout(rt); rt = setTimeout(() => picker.refresh(), 900); } }));
       prev();
       $("#apub", d).addEventListener("click", async (e) => {
         const o = obj();
@@ -497,12 +686,13 @@
         if (st.aud === "lv" && !st.levels.length) return K.toast("Elija al menos un nivel");
         const comm = st.aud.startsWith("c:") ? comms.find((c) => String(c.id) === st.aud.slice(2)) : null;
         const btn = e.currentTarget; btn.disabled = true;
+        if (st.mode === "estudio") await K.EST.prepare(st.est);
         const row = { church_id: K.me.church_id, profile_id: null, kind: st.kind, title: o.title, body: val("ab") || null, event_at: o.event_at,
           place: o.place || null, art: o.art, community_id: comm ? comm.id : null, levels: st.aud === "lv" ? st.levels : null, created_by: K.me.id };
         const { data, error } = await K.sb.from("kaleos_messages").insert(row).select().single();
         if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
         K.bust("anns", "msgs");
-        K.drawAnn(cv, { ...data, id: data.id });
+        K.drawAnn(cv, { ...data, id: data.id, _photo: o._photo });
         const text = `${o.title}${o.event_at ? "\n🗓️ " + K.cap(K.fmtWhen(o.event_at)) : ""}${o.place ? "\n📍 " + o.place : ""}${row.body ? "\n\n" + row.body : ""}\n\n${K.churchShort()} · Iglesia de Dios E.C.`;
         K.toast(comm ? `Publicado para ${comm.name}` : "Publicado en Kaleos");
         close();

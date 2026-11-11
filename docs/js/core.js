@@ -24,6 +24,8 @@
     otro: { n: "Otra cosa", ic: "otro", h: "Cuéntele al pastor lo que necesita." },
   };
   K.RSTAT = { nueva: ["Nuevo", "warn"], orando: ["En camino", ""], atendida: ["Atendido", "ok"] };
+  K.reqOf = (k) => K.REQ[k] || K.REQ.otro;
+  K.statOf = (s) => K.RSTAT[s] || K.RSTAT.nueva;
   K.MSG_KINDS = {
     invitacion: { n: "Invitación", head: "¡Le invitamos!", tpl: "noche" },
     recordatorio: { n: "Recordatorio", head: "No lo olvide", tpl: "marfil" },
@@ -63,15 +65,33 @@
   K.weekdayOf = (s) => K.WEEKDAYS[new Date(s + "T12:00:00Z").getUTCDay()];
   // Fecha y hora local de Guatemala (UTC-6, sin horario de verano) a ISO
   K.gtISO = (date, time = "00:00") => new Date(`${date}T${time}:00-06:00`).toISOString();
-  K.Q = (n) => "Q " + Number(n || 0).toLocaleString("es-GT", { maximumFractionDigits: 0 });
+  // Quetzales: sin centavos si es un monto redondo, con dos decimales si los tiene
+  K.Q = (n) => { const v = Number(n || 0), d = Math.round(Math.abs(v) * 100) % 100 ? 2 : 0; return "Q " + v.toLocaleString("es-GT", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  // Lee un monto escrito a mano: «150», «150.50», «1,500.75», «Q 1 500», «150,5»
+  K.parseAmount = (s) => {
+    let t = String(s ?? "").replace(/[^\d.,]/g, "");
+    if (t.includes(".") && t.includes(",")) t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+    else if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
+    else t = t.replace(/,/g, "");
+    const v = Math.round(parseFloat(t) * 100) / 100;
+    return v > 0 && isFinite(v) ? v : 0;
+  };
   K.pct = (a, b) => (b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0);
-  K.isBirthday = (p) => p && p.birthday && String(p.birthday).slice(5, 10) === today().slice(5, 10);
+  // ¿La fecha v (aaaa-mm-dd) se celebra el día d? Los nacidos un 29 de febrero celebran el 28 en los años no bisiestos.
+  K.sameMD = (v, d) => {
+    if (!v || !d) return false;
+    const a = String(v).slice(5, 10), b = String(d).slice(5, 10), y = +String(d).slice(0, 4);
+    return a === b || (a === "02-29" && b === "02-28" && !(y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)));
+  };
+  K.isBirthday = (p) => !!(p && p.birthday && K.sameMD(p.birthday, today()));
   K.phoneDigits = (p) => String(p || "").replace(/\D/g, "");
   K.waLink = (phone, text) => {
     let d = K.phoneDigits(phone);
     if (d.length === 8) d = "502" + d; // Guatemala
     return `https://wa.me/${d}?text=${encodeURIComponent(text)}`;
   };
+  // Enlace escrito a mano: sin «https://» se lo agrega; cualquier cosa que no sea una página web se descarta
+  K.url = (u) => { const s = String(u || "").trim(); if (/^https?:\/\//i.test(s)) return s; return /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s) ? "https://" + s : ""; };
   K.waOpen = (text, phone) => window.open(phone ? K.waLink(phone, text) : `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
   K.errMsg = (e) => {
     const m = (e && (e.message || e.error_description || e.error)) || String(e);
@@ -100,6 +120,9 @@
     if (data && data.error) throw new Error(data.error);
     return data;
   };
+  // Copia al portapapeles; si el navegador no deja, lo dice en vez de fallar callado
+  K.copy = (text, done = "Copiado") => (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error("sin portapapeles")))
+    .then(() => { K.toast(done); return true; }, () => { K.toast("No se pudo copiar. Mantenga presionado el texto para copiarlo.", 4000); return false; });
   K.qrSvg = (text) => { const q = window.qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); };
   K.speak = (text) => {
     if (!("speechSynthesis" in window)) return K.toast("Este teléfono no puede leer en voz alta");
@@ -124,8 +147,8 @@
   K.shareCanvas = (cv, text, name, phone) => cv.toBlob(async (b) => {
     const file = b && new File([b], name, { type: "image/png" });
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], text }); } catch (err) { if (err.name !== "AbortError") K.toast(K.errMsg(err)); }
-      return;
+      // si el teléfono ya no deja compartir (pasó mucho tiempo desde el toque), se baja la imagen y se abre WhatsApp
+      try { await navigator.share({ files: [file], text }); return; } catch (err) { if (err.name === "AbortError") return; }
     }
     if (file) { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
     K.waOpen(text, phone);
@@ -213,13 +236,22 @@
     alba: ["#1c2240", "#c8734a", "#f3c47c"], olivo: ["#1b281f", "#6f8a5b", "#ecdfad"], vino: ["#2a1320", "#8b3346", "#eeb08a"],
     mar: ["#0d2030", "#2e6e8e", "#c6e8e2"], ocaso: ["#191634", "#5d418c", "#eaafc6"], oro: ["#17130e", "#8d6622", "#f3d48f"],
     cielo: ["#22365c", "#7fa5cb", "#f5f0e4"], lino: ["#efe8db", "#c3a979", "#30291f"],
+    // colores nuevos (los claros llevan la tinta en el tercer color)
+    tinta: ["#0f1a2e", "#2f5d8a", "#bfe0f5"], esmeralda: ["#0b2420", "#1f7a5c", "#c4f0d6"], coral: ["#2a1416", "#c4574a", "#ffd4bb"],
+    granate: ["#1e0b10", "#7a1f33", "#f2c6a6"], noche: ["#07080f", "#2a2f55", "#dfe2fa"], trigo: ["#f5ecd6", "#c9a24f", "#3a2c12"],
+    rosa: ["#f8eaea", "#d48a96", "#4a2229"], perla: ["#eef1f4", "#8fa3b8", "#1d2a3a"],
+    // los colores de La Línea: azul marino y azul medio con dorado
+    linea: ["#0d1b3d", "#2d5fa8", "#f2c85b"],
   });
-  K.PAL_NAMES = { alba: "Alba", olivo: "Olivo", vino: "Vino", mar: "Mar", ocaso: "Ocaso", oro: "Oro", cielo: "Cielo", lino: "Lino" };
-  K.ART_KINDS = { cumbres: "Cumbres", luz: "Luz", aurora: "Aurora", olas: "Olas", lienzo: "Lienzo" };
+  K.PAL_NAMES = { alba: "Alba", olivo: "Olivo", vino: "Vino", mar: "Mar", ocaso: "Ocaso", oro: "Oro", cielo: "Cielo", lino: "Lino",
+    tinta: "Tinta", esmeralda: "Esmeralda", coral: "Coral", granate: "Granate", noche: "Noche", trigo: "Trigo", rosa: "Rosa", perla: "Perla", linea: "La Línea" };
+  K.ART_KINDS = { cumbres: "Cumbres", luz: "Luz", aurora: "Aurora", olas: "Olas", lienzo: "Lienzo",
+    estrellas: "Estrellas", vitral: "Vitral", trigal: "Trigal", acuarela: "Acuarela", petalos: "Pétalos", cruz: "Cruz de luz", geometria: "Geometría", papiro: "Papiro" };
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const mix = (a, b, t, al = 1) => { const A = hex(a), B = hex(b); return `rgba(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(",")},${al})`; };
   const rgba = (h, a) => mix(h, h, 0, a);
-  const isLight = (K.isLight = (p) => p === "lino");
+  // claro = fondo claro con tinta oscura (lino, trigo, rosa, perla)
+  const isLight = (K.isLight = (p) => { const c = (PAL[p] || PAL.alba)[0], [r, g, b] = hex(c); return 0.299 * r + 0.587 * g + 0.114 * b > 150; });
   function rng(seed) { let a = (seed * 9301 + 49297) >>> 0 || 1; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   K.rng = rng;
   let NOISE = null;
@@ -294,6 +326,121 @@
         ctx.fillStyle = lg; ctx.fill();
         ctx.strokeStyle = rgba(light ? c1 : c2, 0.22 - i * 0.015); ctx.lineWidth = Math.max(1, u * 0.002); ctx.stroke();
       }
+    } else if (k === "estrellas") {
+      // cielo estrellado con una franja de luz
+      const band = ctx.createLinearGradient(0, h * 0.15, w, h * 0.85);
+      band.addColorStop(0, rgba(c1, 0)); band.addColorStop(0.5, rgba(light ? c1 : c2, light ? 0.18 : 0.16)); band.addColorStop(1, rgba(c1, 0));
+      ctx.fillStyle = band; ctx.fillRect(0, 0, w, h);
+      const sc = light ? c1 : c2;
+      for (let i = 0; i < 420; i++) { ctx.fillStyle = rgba(sc, 0.15 + R() * 0.7); ctx.beginPath(); ctx.arc(w * R(), h * R(), u * 0.0022 * (R() ** 3 * 3 + 0.4), 0, 7); ctx.fill(); }
+      for (let i = 0; i < 7; i++) {
+        const x = w * R(), y = h * R() * 0.8, r = u * (0.012 + R() * 0.02);
+        const rg = ctx.createRadialGradient(x, y, 0, x, y, r * 4); rg.addColorStop(0, rgba(sc, 0.7)); rg.addColorStop(1, rgba(sc, 0));
+        ctx.fillStyle = rg; ctx.fillRect(x - r * 4, y - r * 4, r * 8, r * 8);
+        ctx.strokeStyle = rgba(sc, 0.6); ctx.lineWidth = Math.max(1, u * 0.0015);
+        ctx.beginPath(); ctx.moveTo(x - r * 2.4, y); ctx.lineTo(x + r * 2.4, y); ctx.moveTo(x, y - r * 2.4); ctx.lineTo(x, y + r * 2.4); ctx.stroke();
+      }
+    } else if (k === "vitral") {
+      // vitral: vidrios de colores con su plomo
+      const cols = Math.max(4, Math.round(w / (u * 0.17))), rows = Math.max(4, Math.round(h / (u * 0.17))), cw = w / cols, chh = h / rows, P = [];
+      for (let i = 0; i <= cols; i++) { P[i] = []; for (let j = 0; j <= rows; j++) P[i][j] = [i * cw + (i && i < cols ? (R() - 0.5) * cw * 0.7 : 0), j * chh + (j && j < rows ? (R() - 0.5) * chh * 0.7 : 0)]; }
+      const glass = [c1, c2, mix(c1, c2, 0.5, 1), mix(c0, c2, 0.35, 1)];
+      const tri = (a, b, c) => {
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath();
+        const g0 = glass[Math.floor(R() * glass.length)];
+        ctx.fillStyle = g0.startsWith("#") ? rgba(g0, light ? 0.16 + R() * 0.18 : 0.12 + R() * 0.22) : g0.replace(/,1\)$/, `,${light ? 0.2 : 0.2 + R() * 0.15})`); ctx.fill();
+        ctx.strokeStyle = light ? rgba(c2, 0.28) : "rgba(0,0,0,.5)"; ctx.lineWidth = Math.max(1.5, u * 0.005); ctx.lineJoin = "round"; ctx.stroke();
+      };
+      for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+        const a = P[i][j], b = P[i + 1][j], c = P[i + 1][j + 1], d = P[i][j + 1];
+        if (R() < 0.5) { tri(a, b, c); tri(a, c, d); } else { tri(a, b, d); tri(b, c, d); }
+      }
+      const rg = ctx.createRadialGradient(w * 0.5, -h * 0.05, 0, w * 0.5, -h * 0.05, h * 0.9);
+      rg.addColorStop(0, rgba(light ? "#ffffff" : c2, 0.35)); rg.addColorStop(1, rgba(c2, 0));
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
+    } else if (k === "trigal") {
+      // espigas de trigo al atardecer
+      const sx = w * (0.3 + R() * 0.4), sy = h * 0.42;
+      const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, u * 0.75);
+      sg.addColorStop(0, rgba(light ? "#ffffff" : c2, 0.6)); sg.addColorStop(1, rgba(c2, 0));
+      ctx.fillStyle = sg; ctx.fillRect(0, 0, w, h);
+      for (let layer = 0; layer < 3; layer++) {
+        const n = 34 + layer * 18, base = h * (1.02 + layer * 0.02), col = layer === 2 ? (light ? c2 : c0) : c1;
+        for (let i = 0; i < n; i++) {
+          const x0 = w * R(), tall = h * (0.22 + R() * 0.2 - layer * 0.04), lean = (R() - 0.5) * w * 0.08, tx = x0 + lean, ty = base - tall;
+          ctx.strokeStyle = mix(col, light ? c0 : c2, layer === 2 ? 0 : 0.25, 0.5 + layer * 0.15); ctx.lineWidth = Math.max(1, u * 0.002);
+          ctx.beginPath(); ctx.moveTo(x0, base); ctx.quadraticCurveTo(x0 + lean * 0.2, base - tall * 0.5, tx, ty); ctx.stroke();
+          ctx.fillStyle = mix(col, light ? c0 : c2, layer === 2 ? 0.1 : 0.35, 0.55 + layer * 0.15);
+          for (let g = 0; g < 7; g++) {
+            const gy = ty + g * u * 0.013, side = g % 2 ? 1 : -1;
+            ctx.save(); ctx.translate(tx + side * u * 0.006, gy); ctx.rotate(side * 0.5 + lean / w);
+            ctx.beginPath(); ctx.ellipse(0, 0, u * 0.005, u * 0.011, 0, 0, 7); ctx.fill(); ctx.restore();
+          }
+        }
+      }
+    } else if (k === "acuarela") {
+      // manchas de acuarela con bordes irregulares
+      ctx.globalCompositeOperation = light ? "multiply" : "screen";
+      for (let i = 0; i < 9; i++) {
+        const x = w * R(), y = h * R(), r = u * (0.18 + R() * 0.3), c = [c1, c2, mix(c1, c2, 0.5, 1)][i % 3];
+        for (let layer = 0; layer < 4; layer++) {
+          ctx.beginPath();
+          const pts = 26, rr = r * (1 - layer * 0.16);
+          for (let p = 0; p <= pts; p++) { const a = (p / pts) * Math.PI * 2, q = rr * (0.82 + R() * 0.3); p ? ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q) : ctx.moveTo(x + q, y); }
+          ctx.closePath();
+          ctx.fillStyle = c.startsWith("#") ? rgba(c, light ? 0.07 : 0.06) : c.replace(/,1\)$/, ",.06)"); ctx.fill();
+        }
+      }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (k === "petalos") {
+      // pétalos que caen
+      const sg = ctx.createRadialGradient(w * 0.8, h * 0.1, 0, w * 0.8, h * 0.1, u * 0.9);
+      sg.addColorStop(0, rgba(light ? "#ffffff" : c2, 0.3)); sg.addColorStop(1, rgba(c2, 0));
+      ctx.fillStyle = sg; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 70; i++) {
+        const x = w * R(), y = h * R(), s = u * (0.012 + R() * 0.03), col = R() < 0.6 ? c2 : c1;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(R() * Math.PI * 2); ctx.globalAlpha = light ? 0.18 + R() * 0.3 : 0.15 + R() * 0.45;
+        ctx.fillStyle = light && col === c2 ? c1 : col;
+        ctx.beginPath(); ctx.moveTo(0, -s); ctx.bezierCurveTo(s * 0.9, -s * 0.6, s * 0.7, s * 0.7, 0, s); ctx.bezierCurveTo(-s * 0.7, s * 0.7, -s * 0.9, -s * 0.6, 0, -s); ctx.fill();
+        ctx.restore();
+      }
+    } else if (k === "cruz") {
+      // una cruz de luz suave
+      const cx = w / 2, cy = h * (0.3 + R() * 0.12), lc = light ? "#ffffff" : c2, bw = u * 0.05;
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, u * 0.8);
+      glow.addColorStop(0, rgba(lc, light ? 0.7 : 0.45)); glow.addColorStop(1, rgba(lc, 0));
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+      const v = ctx.createLinearGradient(0, 0, 0, h);
+      v.addColorStop(0, rgba(lc, 0)); v.addColorStop(cy / h, rgba(lc, light ? 0.55 : 0.35)); v.addColorStop(1, rgba(lc, 0));
+      ctx.fillStyle = v; ctx.fillRect(cx - bw / 2, 0, bw, h);
+      const hz = ctx.createLinearGradient(cx - u * 0.5, 0, cx + u * 0.5, 0);
+      hz.addColorStop(0, rgba(lc, 0)); hz.addColorStop(0.5, rgba(lc, light ? 0.55 : 0.35)); hz.addColorStop(1, rgba(lc, 0));
+      ctx.fillStyle = hz; ctx.fillRect(cx - u * 0.5, cy - bw * 1.6, u, bw);
+      ctx.lineWidth = Math.max(1, u * 0.0016);
+      for (let i = 0; i < 40; i++) {
+        const a = R() * Math.PI * 2, L = u * (0.25 + R() * 0.7);
+        ctx.strokeStyle = rgba(lc, 0.05 + R() * 0.08); ctx.beginPath(); ctx.moveTo(cx, cy - bw); ctx.lineTo(cx + Math.cos(a) * L, cy - bw + Math.sin(a) * L); ctx.stroke();
+      }
+    } else if (k === "geometria") {
+      // círculos entrelazados (como encajes) alrededor de un centro
+      const cx = w * (0.5 + (R() - 0.5) * 0.3), cy = h * (0.35 + R() * 0.2), r = u * (0.12 + R() * 0.05);
+      ctx.lineWidth = Math.max(1, u * 0.0018);
+      for (let ring = 0; ring < 4; ring++) for (let i = 0; i < 6 * Math.max(1, ring); i++) {
+        const a = (i / (6 * Math.max(1, ring))) * Math.PI * 2, d = r * ring;
+        ctx.strokeStyle = rgba(light ? c1 : c2, 0.22 - ring * 0.04); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r, 0, 7); ctx.stroke();
+      }
+      for (let i = 1; i < 6; i++) { ctx.strokeStyle = rgba(light ? c1 : c2, 0.12); ctx.beginPath(); ctx.arc(cx, cy, r * (3.4 + i * 0.6), 0, 7); ctx.stroke(); }
+      const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 3);
+      rg.addColorStop(0, rgba(light ? "#ffffff" : c2, 0.3)); rg.addColorStop(1, rgba(c2, 0));
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
+    } else if (k === "papiro") {
+      // fibras de papiro tejidas y bordes tostados
+      ctx.lineWidth = Math.max(1, u * 0.0016);
+      for (let i = 0; i < 160; i++) { const y = h * R(); ctx.strokeStyle = rgba(light ? c1 : c2, 0.03 + R() * 0.06); ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(w * 0.3, y + (R() - 0.5) * 8, w * 0.7, y + (R() - 0.5) * 8, w, y + (R() - 0.5) * 6); ctx.stroke(); }
+      for (let i = 0; i < 90; i++) { const x = w * R(); ctx.strokeStyle = rgba(light ? c1 : c2, 0.02 + R() * 0.04); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + (R() - 0.5) * 10, h); ctx.stroke(); }
+      const burn = ctx.createRadialGradient(w / 2, h / 2, u * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+      burn.addColorStop(0, "rgba(0,0,0,0)"); burn.addColorStop(1, light ? rgba(c1, 0.45) : "rgba(0,0,0,.45)");
+      ctx.fillStyle = burn; ctx.fillRect(0, 0, w, h);
     } else {
       for (let i = 0; i < 5; i++) {
         const x = w * R(), y = h * R(), r = u * (0.3 + R() * 0.4);
@@ -344,18 +491,23 @@
   const SERIF = '"Cormorant Garamond", Garamond, Georgia, serif', SANS = '"Hanken Grotesk", system-ui, sans-serif';
   K.SERIF = SERIF; K.SANS = SANS;
   function drawVerse(cv, o) {
+    if (K.EST && o.est && K.EST.is(o.est) && K.EST.parse(o.est)) return K.EST.render(cv, "verse", o.est, o, { fmt: o.fmt, seed: o.ref, photo: o._photo });
     const W = 1080, H = o.fmt === "historia" ? 1920 : o.fmt === "post" ? 1350 : 1080;
     cv.width = W; cv.height = H;
     const ctx = cv.getContext("2d");
     art(ctx, W, H, o);
     const P = PAL[o.pal] || PAL.alba, light = isLight(o.pal), ink = light ? P[2] : "#FBF6EC", acc = light ? "#8a6a2c" : P[2];
+    // velo suave al centro para que el texto se lea aunque el fondo sea muy luminoso
+    const veil = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.62);
+    veil.addColorStop(0, light ? "rgba(255,252,244,.32)" : "rgba(6,8,20,.26)"); veil.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = veil; ctx.fillRect(0, 0, W, H);
     const ls = (v) => { if ("letterSpacing" in ctx) ctx.letterSpacing = v; };
     const glow = (on) => { ctx.shadowColor = "rgba(0,0,0,.32)"; ctx.shadowBlur = on && !light ? 34 : 0; };
     const M = 110, maxW = W - M * 2, story = o.fmt === "historia";
     const top = story ? 320 : M + 30, bottom = H - (story ? 340 : M) - (o.firma ? 70 : 0);
-    const fit = (fontFn, text, maxH, start, min, lhK = 1.14) => {
-      for (let s = start; s >= min; s -= 3) { ctx.font = fontFn(s); const lines = wrap(ctx, text, maxW); if (lines.length * s * lhK <= maxH) return { s, lines, lh: s * lhK }; }
-      ctx.font = fontFn(min); return { s: min, lines: wrap(ctx, text, maxW), lh: min * lhK };
+    const fit = (fontFn, text, maxH, start, min, lhK = 1.14, mw = maxW) => {
+      for (let s = start; s >= min; s -= 3) { ctx.font = fontFn(s); const lines = wrap(ctx, text, mw); if (lines.length * s * lhK <= maxH && lines.every((l) => ctx.measureText(l).width <= mw)) return { s, lines, lh: s * lhK }; }
+      ctx.font = fontFn(min); return { s: min, lines: wrap(ctx, text, mw), lh: min * lhK };
     };
     ctx.fillStyle = ink; ctx.textBaseline = "alphabetic"; glow(true);
     let y0 = top;
@@ -369,7 +521,7 @@
       glow(false); ctx.fillStyle = acc; ctx.fillRect(W / 2 - 30, y0 - 20, 60, 3); ctx.fillStyle = ink; glow(true);
       y0 += 20;
     }
-    const refH = 100, area = bottom - y0 - refH, L = o.head ? "clasico" : o.layout || "clasico";
+    const refH = 100, area = bottom - y0 - refH, L = o.head ? "clasico" : LAYOUTS[o.layout] ? o.layout : "clasico";
     if (L === "clasico") {
       const f = fit((s) => `italic 500 ${s}px ${SERIF}`, o.text, area, o.head ? 66 : 104, 40);
       const blockH = f.lines.length * f.lh, start = y0 + Math.max(0, (area - blockH) / 2) + f.s * 0.85;
@@ -388,6 +540,29 @@
       const ry = st + (f.lines.length - 1) * f.lh + 100;
       glow(false); ctx.fillStyle = acc; ctx.fillRect(M, ry - 9, 70, 2); ctx.fillStyle = ink;
       ls("6px"); ctx.font = `600 26px ${SANS}`; ctx.fillText(String(o.ref).toUpperCase(), M + 92, ry); ls("0px");
+    } else if (L === "marco") {
+      // el texto dentro de un marco con filete doble
+      const mw = maxW - 110, f = fit((s) => `italic 500 ${s}px ${SERIF}`, o.text, area - 160, 86, 38, 1.16, mw);
+      const blockH = f.lines.length * f.lh + 110, py = y0 + Math.max(0, (area + refH - blockH - 140) / 2), ph = blockH + 140, px = M - 20, pw = W - (M - 20) * 2;
+      glow(false);
+      ctx.fillStyle = light ? "rgba(255,255,255,.55)" : "rgba(0,0,0,.26)"; ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = acc; ctx.lineWidth = 3; ctx.strokeRect(px, py, pw, ph);
+      ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.strokeRect(px + 16, py + 16, pw - 32, ph - 32); ctx.globalAlpha = 1;
+      for (const [dx, dy] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) { ctx.save(); ctx.translate(dx, dy); ctx.rotate(Math.PI / 4); ctx.fillStyle = acc; ctx.fillRect(-9, -9, 18, 18); ctx.restore(); }
+      ctx.fillStyle = ink; ctx.textAlign = "center"; ctx.font = `italic 500 ${f.s}px ${SERIF}`; glow(true);
+      const st = py + 70 + f.s * 0.85;
+      f.lines.forEach((l, i) => ctx.fillText(l, W / 2, st + i * f.lh));
+      glow(false); ls("7px"); ctx.font = `600 25px ${SANS}`; ctx.fillStyle = acc;
+      ctx.fillText(String(o.ref).toUpperCase(), W / 2, st + (f.lines.length - 1) * f.lh + 90); ctx.fillStyle = ink; ls("0px");
+    } else if (L === "esquina") {
+      // texto a la izquierda, asentado abajo, como en una revista
+      const f = fit((s) => `italic 500 ${s}px ${SERIF}`, o.text, area * 0.72, 84, 38, 1.14, maxW - 40);
+      const blockH = f.lines.length * f.lh, st = bottom - refH - blockH + f.s * 0.85;
+      glow(false); ctx.fillStyle = acc; ctx.fillRect(M, st - f.s - 40, 90, 4); ctx.fillStyle = ink; glow(true);
+      ctx.textAlign = "left"; ctx.font = `italic 500 ${f.s}px ${SERIF}`;
+      f.lines.forEach((l, i) => ctx.fillText(l, M, st + i * f.lh));
+      glow(false); ls("7px"); ctx.font = `600 26px ${SANS}`; ctx.fillStyle = acc;
+      ctx.fillText(String(o.ref).toUpperCase(), M, st + (f.lines.length - 1) * f.lh + 80); ctx.fillStyle = ink; ls("0px");
     } else {
       const cut = o.text.search(/[;:,]/), a = cut > 6 && cut < 70 ? o.text.slice(0, cut) : o.text.split(" ").slice(0, 4).join(" ");
       const b = o.text.slice(a.length).replace(/^[;:,.]\s*/, "").trim();
@@ -409,21 +584,29 @@
     }
   }
   K.drawVerse = drawVerse;
+  // composiciones del versículo (5) × estilos (13) × colores (16) = 1.040 diseños por formato
+  const LAYOUTS = (K.LAYOUTS = { clasico: "Clásica", editorial: "Editorial", monumental: "Monumental", marco: "Marco", esquina: "Esquina" });
   K.redrawVerses = () => $$("canvas[data-vc]").forEach((cv) => VC[cv.dataset.vc] && drawVerse(cv, VC[cv.dataset.vc]));
 
   // Imagen de un anuncio (1080 × 1350) para compartir en WhatsApp
+  // composiciones (5) × estilos (13) × colores (17) = 1.105 diseños
+  const ANN_LAYOUTS = (K.ANN_LAYOUTS = { fecha: "Fecha grande", centro: "Centrado", cinta: "Cinta", marco: "Marco", agenda: "Calendario" });
   K.drawAnn = (cv, a) => {
+    if (K.EST && a.art && a.art.e && K.EST.T[a.art.e]) return K.EST.render(cv, "ann", K.EST.key(a.art.e, a.art.t, a.art.f), a, { seed: a.id, photo: a._photo });
     const W = 1080, H = 1350; cv.width = W; cv.height = H;
-    const ctx = cv.getContext("2d"), t = K.artOf(a.id || 1, a.art);
+    const ctx = cv.getContext("2d"), t = K.artOf(a.id || 1, a.art), L = ANN_LAYOUTS[t.l] ? t.l : "fecha";
     art(ctx, W, H, { kind: t.k, pal: t.p, seed: t.s });
     const light = isLight(t.p), ink = light ? "#1d1a14" : "#FBF6EC", acc = light ? "#8a6a2c" : PAL[t.p][2];
+    const ls = (v) => { if ("letterSpacing" in ctx) ctx.letterSpacing = v; };
+    const church = `IGLESIA DE DIOS E.C. · ${K.churchShort().toUpperCase()}`, d = a.event_at ? new Date(a.event_at) : null;
+    const whenLine = d ? `${K.dpart(d, { weekday: "long" })} ${K.dpart(d, { day: "numeric" })} de ${K.dpart(d, { month: "long" })} · ${K.fmtTime(a.event_at)}` : "";
+    if (L !== "fecha") return annLayout(ctx, a, { W, H, L, light, ink, acc, ls, church, d, whenLine });
     const g = ctx.createLinearGradient(0, H * 0.35, 0, H);
     g.addColorStop(0, "rgba(8,10,22,0)"); g.addColorStop(1, light ? "rgba(255,250,240,.5)" : "rgba(8,10,22,.6)");
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const ls = (v) => { if ("letterSpacing" in ctx) ctx.letterSpacing = v; };
     ctx.fillStyle = ink; ctx.textAlign = "left";
     ls("8px"); ctx.font = `600 26px ${SANS}`; ctx.globalAlpha = 0.85;
-    ctx.fillText(`IGLESIA DE DIOS E.C. · ${K.churchShort().toUpperCase()}`, 96, 130); ctx.globalAlpha = 1; ls("0px");
+    ctx.fillText(church, 96, 130); ctx.globalAlpha = 1; ls("0px");
     let y = H - 120;
     if (a.event_at) {
       const d = new Date(a.event_at);
@@ -440,6 +623,71 @@
     ctx.fillStyle = acc; ctx.fillRect(98, y + (lines.length - 1) * 96 + 40, 70, 3); ctx.fillStyle = ink;
     if (meta) { ctx.font = `500 34px ${SANS}`; ctx.fillText(meta, 96, y + (lines.length - 1) * 96 + 110); }
   };
+  function annLayout(ctx, a, o) {
+    const { W, H, L, light, ink, acc, ls, church, d, whenLine } = o, M = 96;
+    const fitT = (txt, start, min, mw, maxL) => { for (let s = start; s >= min; s -= 4) { ctx.font = `italic 600 ${s}px ${SERIF}`; const l = wrap(ctx, txt, mw); if (l.length <= maxL && l.every((x) => ctx.measureText(x).width <= mw)) return { s, l }; } ctx.font = `italic 600 ${min}px ${SERIF}`; return { s: min, l: wrap(ctx, txt, mw).slice(0, maxL) }; };
+    const title = a.title || "", place = a.place || "";
+    const shade = (alpha) => { ctx.fillStyle = light ? `rgba(255,252,245,${alpha})` : `rgba(6,8,20,${alpha})`; ctx.fillRect(0, 0, W, H); };
+    ctx.textBaseline = "alphabetic";
+    if (L === "centro") {
+      shade(0.22); ctx.fillStyle = ink; ctx.textAlign = "center";
+      ls("8px"); ctx.font = `600 24px ${SANS}`; ctx.globalAlpha = 0.85; ctx.fillText(church, W / 2, 150); ctx.globalAlpha = 1; ls("0px");
+      const f = fitT(title, 120, 64, W - 2 * M, 4), lh = f.s * 1.05, top = H / 2 - ((f.l.length - 1) * lh) / 2 - 40;
+      f.l.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lh));
+      let y = top + (f.l.length - 1) * lh + 70;
+      ctx.fillStyle = acc; ctx.fillRect(W / 2 - 40, y - 10, 80, 3); ctx.fillStyle = ink;
+      if (whenLine) { y += 60; ls("5px"); ctx.font = `600 32px ${SANS}`; ctx.fillText(whenLine.toUpperCase(), W / 2, y); ls("0px"); }
+      if (place) { y += 56; ctx.font = `500 32px ${SANS}`; ctx.fillText(place, W / 2, y); }
+    } else if (L === "cinta") {
+      shade(0.1);
+      const f = fitT(title, 104, 60, W - 2 * M, 3), bandH = f.l.length * f.s * 1.06 + (whenLine ? 150 : 90), by = H * 0.52 - bandH / 2;
+      ctx.fillStyle = light ? "rgba(255,255,255,.82)" : "rgba(6,8,20,.62)"; ctx.fillRect(0, by, W, bandH);
+      ctx.fillStyle = acc; ctx.fillRect(0, by, W, 6); ctx.fillRect(0, by + bandH - 6, W, 6);
+      ctx.fillStyle = ink; ctx.textAlign = "center";
+      ls("8px"); ctx.font = `600 24px ${SANS}`; ctx.globalAlpha = 0.9; ctx.fillText(church, W / 2, by - 40); ctx.globalAlpha = 1; ls("0px");
+      ctx.font = `italic 600 ${f.s}px ${SERIF}`;
+      f.l.forEach((l, i) => ctx.fillText(l, W / 2, by + 40 + f.s * 0.9 + i * f.s * 1.06));
+      if (whenLine) { ls("5px"); ctx.font = `600 30px ${SANS}`; ctx.fillStyle = acc; ctx.fillText(whenLine.toUpperCase(), W / 2, by + bandH - 42); ctx.fillStyle = ink; ls("0px"); }
+      if (place) { ctx.font = `500 32px ${SANS}`; ctx.fillStyle = ink; ctx.fillText(place, W / 2, by + bandH + 70); }
+    } else if (L === "marco") {
+      shade(0.18);
+      const px = 70, py = 70, pw = W - 140, ph = H - 140;
+      ctx.strokeStyle = acc; ctx.lineWidth = 4; ctx.strokeRect(px, py, pw, ph);
+      ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5; ctx.strokeRect(px + 18, py + 18, pw - 36, ph - 36); ctx.globalAlpha = 1;
+      ctx.fillStyle = ink; ctx.textAlign = "center";
+      ls("8px"); ctx.font = `600 24px ${SANS}`; ctx.globalAlpha = 0.85; ctx.fillText(church, W / 2, py + 110); ctx.globalAlpha = 1; ls("0px");
+      if (d) {
+        ctx.font = `500 200px ${SERIF}`; ctx.fillText(K.dpart(d, { day: "numeric" }), W / 2, 470);
+        ls("8px"); ctx.font = `600 30px ${SANS}`; ctx.fillStyle = acc; ctx.fillText(`${K.dpart(d, { month: "long" })} · ${K.dpart(d, { weekday: "long" })}`.toUpperCase(), W / 2, 530); ctx.fillStyle = ink; ls("0px");
+      }
+      const f = fitT(title, 96, 56, pw - 160, 3), lh = f.s * 1.06, top = d ? 690 : H / 2 - ((f.l.length - 1) * lh) / 2;
+      f.l.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lh));
+      let y = top + (f.l.length - 1) * lh + 80;
+      if (d) { ls("5px"); ctx.font = `600 30px ${SANS}`; ctx.fillText(K.fmtTime(a.event_at).toUpperCase(), W / 2, y); ls("0px"); y += 54; }
+      if (place) { ctx.font = `500 32px ${SANS}`; ctx.fillText(place, W / 2, y); }
+    } else {
+      // agenda: hoja de calendario arriba a la izquierda y el título abajo
+      const g = ctx.createLinearGradient(0, H * 0.4, 0, H); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, light ? "rgba(255,250,240,.55)" : "rgba(6,8,20,.62)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const cx = M, cy = 110, cw = 260, ch = 290;
+      ctx.save(); ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
+      ctx.fillStyle = "#FFFDF8"; ctx.fillRect(cx, cy, cw, ch); ctx.restore();
+      ctx.fillStyle = acc === "#8a6a2c" ? "#8a6a2c" : PAL.linea[0]; ctx.fillRect(cx, cy, cw, 78);
+      ctx.textAlign = "center"; ctx.fillStyle = "#FFFDF8"; ls("6px"); ctx.font = `700 28px ${SANS}`;
+      ctx.fillText(d ? K.dpart(d, { month: "long" }).toUpperCase() : "PRÓXIMO", cx + cw / 2, cy + 52); ls("0px");
+      ctx.fillStyle = "#1d1a14"; ctx.font = `600 150px ${SERIF}`; ctx.fillText(d ? K.dpart(d, { day: "numeric" }) : "★", cx + cw / 2, cy + 225);
+      ctx.font = `600 24px ${SANS}`; ctx.fillStyle = "#5e5646"; ctx.fillText(d ? K.cap(K.dpart(d, { weekday: "long" })) : "", cx + cw / 2, cy + 268);
+      ctx.fillStyle = ink; ctx.textAlign = "right"; ls("6px"); ctx.font = `600 22px ${SANS}`; ctx.globalAlpha = 0.85;
+      ctx.fillText(K.churchShort().toUpperCase(), W - M, cy + 40); ctx.globalAlpha = 1; ls("0px");
+      ctx.textAlign = "left";
+      const f = fitT(title, 100, 58, W - 2 * M, 4), lh = f.s * 1.04;
+      let y = H - 150 - (place ? 56 : 0) - (d ? 56 : 0) - (f.l.length - 1) * lh;
+      f.l.forEach((l, i) => ctx.fillText(l, M, y + i * lh));
+      y += (f.l.length - 1) * lh + 40; ctx.fillStyle = acc; ctx.fillRect(M + 2, y, 70, 3); ctx.fillStyle = ink;
+      if (d) { y += 66; ls("5px"); ctx.font = `600 30px ${SANS}`; ctx.fillText(K.fmtTime(a.event_at).toUpperCase(), M, y); ls("0px"); }
+      if (place) { y += 56; ctx.font = `500 32px ${SANS}`; ctx.fillText(place, M, y); }
+    }
+  }
 
   function guilloche(cv) {
     const w = cv.clientWidth, h = cv.clientHeight; if (!w || cv.dataset.done === w + "") return;
@@ -486,11 +734,54 @@
     ["Hebreos 13:8", "Jesucristo es el mismo ayer, y hoy, y por los siglos."],
     ["Juan 3:16", "Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito, para que todo aquel que en él cree, no se pierda, mas tenga vida eterna."],
     ["Salmos 91:1", "El que habita al abrigo del Altísimo morará bajo la sombra del Omnipotente."],
+    // los que usa La Línea en sus temas del mes y avisos
+    ["Juan 14:1", "No se turbe vuestro corazón; creéis en Dios, creed también en mí."],
+    ["Romanos 5:1", "Justificados, pues, por la fe, tenemos paz para con Dios por medio de nuestro Señor Jesucristo."],
+    ["Mateo 28:19-20", "Por tanto, id, y haced discípulos a todas las naciones, bautizándolos en el nombre del Padre, y del Hijo, y del Espíritu Santo; enseñándoles que guarden todas las cosas que os he mandado; y he aquí yo estoy con vosotros todos los días, hasta el fin del mundo."],
+    ["Isaías 55:6", "Buscad a Jehová mientras puede ser hallado, llamadle en tanto que está cercano."],
+    ["Juan 11:25", "Le dijo Jesús: Yo soy la resurrección y la vida; el que cree en mí, aunque esté muerto, vivirá."],
+    ["Salmos 33:12", "Bienaventurada la nación cuyo Dios es Jehová, el pueblo que él escogió como heredad para sí."],
+    ["Mateo 19:14", "Pero Jesús dijo: Dejad a los niños venir a mí, y no se lo impidáis; porque de los tales es el reino de los cielos."],
+    ["Filipenses 4:6", "Por nada estéis afanosos, sino sean conocidas vuestras peticiones delante de Dios en toda oración y ruego, con acción de gracias."],
+    ["Jeremías 33:3", "Clama a mí, y yo te responderé, y te enseñaré cosas grandes y ocultas que tú no conoces."],
+    ["1 Tesalonicenses 5:18", "Dad gracias en todo, porque esta es la voluntad de Dios para con vosotros en Cristo Jesús."],
+    ["Salmos 100:4", "Entrad por sus puertas con acción de gracias, por sus atrios con alabanza; alabadle, bendecid su nombre."],
+    ["Proverbios 22:6", "Instruye al niño en su camino, y aun cuando fuere viejo no se apartará de él."],
+    ["Josué 24:15", "Pero yo y mi casa serviremos a Jehová."],
+    ["1 Corintios 13:4", "El amor es sufrido, es benigno; el amor no tiene envidia, el amor no es jactancioso, no se envanece."],
+    ["Romanos 10:15", "¡Cuán hermosos son los pies de los que anuncian la paz, de los que anuncian buenas nuevas!"],
+    ["Hechos 1:8", "Pero recibiréis poder, cuando haya venido sobre vosotros el Espíritu Santo, y me seréis testigos en Jerusalén, en toda Judea, en Samaria, y hasta lo último de la tierra."],
+    ["Salmos 103:2", "Bendice, alma mía, a Jehová, y no olvides ninguno de sus beneficios."],
+    ["Isaías 41:10", "No temas, porque yo estoy contigo; no desmayes, porque yo soy tu Dios que te esfuerzo; siempre te ayudaré, siempre te sustentaré con la diestra de mi justicia."],
+    ["2 Timoteo 3:16", "Toda la Escritura es inspirada por Dios, y útil para enseñar, para redargüir, para corregir, para instruir en justicia."],
+    ["Salmos 34:8", "Gustad, y ved que es bueno Jehová; dichoso el hombre que confía en él."],
   ];
+  // temas para que el asistente encuentre un versículo cuando le piden «uno de fe», «de paz»…
+  K.VERSE_THEMES = {
+    fe: ["Hebreos 13:8", "Proverbios 3:5", "Romanos 5:1", "Juan 14:1", "Romanos 8:28"],
+    paz: ["Juan 14:27", "Juan 14:1", "Filipenses 4:6", "Romanos 5:1"],
+    fortaleza: ["Filipenses 4:13", "Isaías 40:31", "Josué 1:9", "Salmos 46:1", "Isaías 41:10"],
+    animo: ["Josué 1:9", "Isaías 41:10", "Isaías 43:1", "Mateo 11:28", "Juan 14:1"],
+    esperanza: ["Jeremías 29:11", "Lamentaciones 3:22-23", "Romanos 8:28", "Salmos 121:1-2"],
+    gratitud: ["1 Tesalonicenses 5:18", "Salmos 100:4", "Salmos 103:2", "Salmos 118:24"],
+    oracion: ["Jeremías 33:3", "Filipenses 4:6", "Isaías 55:6", "Mateo 11:28"],
+    familia: ["Josué 24:15", "Proverbios 22:6", "Salmos 133:1", "1 Corintios 13:4"],
+    amor: ["Juan 3:16", "1 Corintios 13:4", "Salmos 133:1"],
+    ninos: ["Mateo 19:14", "Proverbios 22:6"],
+    misiones: ["Mateo 28:19-20", "Hechos 1:8", "Romanos 10:15"],
+    salvacion: ["Juan 3:16", "Juan 11:25", "Isaías 55:6", "1 Pedro 2:9"],
+    proteccion: ["Salmos 91:1", "Salmos 27:1", "Salmos 46:1", "Salmos 23:1", "Números 6:24"],
+    palabra: ["Salmos 119:105", "2 Timoteo 3:16"],
+    patria: ["Salmos 33:12"],
+    confianza: ["Proverbios 3:5", "Salmos 37:5", "Salmos 34:8", "Mateo 6:33"],
+  };
   K.dayIndex = () => { const t = today(); return Math.round((Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10)) - Date.UTC(2026, 0, 1)) / 86400000); };
   K.defaultVerse = () => {
     const n = K.dayIndex(), [ref, text] = K.VERSES[((n % K.VERSES.length) + K.VERSES.length) % K.VERSES.length];
     const a = K.artOf(n + 2);
+    // el día 1 de cada mes, el tema del mes de la iglesia
+    const tm = K.temaDelMes && K.temaDelMes(), tv = tm && K.VERSES.find(([r]) => r === tm.ref);
+    if (tv && today().slice(8) === "01") return { ref: tv[0], text: tv[1], pal: "linea", kind: "luz", seed: a.s, layout: "clasico", fmt: "cuadrado", firma: true };
     return { ref, text, pal: a.p, kind: a.k, seed: a.s, layout: "clasico", fmt: "cuadrado", firma: true };
   };
 
@@ -552,8 +843,12 @@
   K.sheet = (html, onMount) => openLayer("sheet", html, onMount);
   K.drawer = (html, onMount) => openLayer(window.innerWidth >= 700 ? "drawer" : "sheet", html, onMount);
   K.closeAll = (now) => {
+    // cierra las hojas abiertas ahora; una que se abra enseguida no debe desaparecer con ellas ni quedarse sin fondo
     $$(".sheet,.drawer").forEach((e) => { e.classList.remove("show"); if (now) e.remove(); else setTimeout(() => e.remove(), 280); });
-    const sc = $("#scrim"); if (sc) { sc.classList.remove("show"); if (now) sc.hidden = true; else setTimeout(() => (sc.hidden = true), 220); }
+    const sc = $("#scrim"); if (!sc) return;
+    sc.classList.remove("show");
+    if (now) sc.hidden = true;
+    else setTimeout(() => { if (!$(".sheet.show,.drawer.show")) sc.hidden = true; }, 220);
   };
   K.head = (title, eyebrow) => `<div class="sh"><div style="flex:1;min-width:0">${eyebrow ? `<span class="eyebrow">${esc(eyebrow)}</span>` : ""}<h2${eyebrow ? ' style="margin-top:6px"' : ""}>${esc(title)}</h2></div><button class="iconbtn" data-close aria-label="Cerrar">${ic("close")}</button></div>`;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDD(); K.closeAll(); } });
@@ -662,11 +957,14 @@
       </form></div>`;
     $("#f").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const btn = $("#go"); btn.disabled = true; btn.textContent = "Entrando…";
-      const no = K.normalizeMemberNo($("#no").value);
-      const { error } = await K.sb.auth.signInWithPassword({ email: emailFor(no), password: $("#pin").value.trim() });
-      if (error) { btn.disabled = false; btn.textContent = "Entrar"; return K.toast(K.errMsg(error)); }
-      await K.loadMe();
+      const btn = $("#go"), ready = () => { btn.disabled = false; btn.textContent = "Entrar"; };
+      btn.disabled = true; btn.textContent = "Entrando…";
+      try {
+        const no = K.normalizeMemberNo($("#no").value);
+        const { error } = await K.sb.auth.signInWithPassword({ email: emailFor(no), password: $("#pin").value.trim() });
+        if (error) { ready(); return K.toast(K.errMsg(error)); }
+        await K.loadMe();
+      } catch (err) { console.error(err); ready(); K.toast(K.errMsg(err), 4000); }
     });
   }
   K.renderLogin = renderLogin;
@@ -799,16 +1097,19 @@
     $("#pr", el).addEventListener("click", () => window.print());
     $("#send", el).addEventListener("click", () => {
       const subject = `Reporte ministerial ${mName} · ${K.churchShort()}`;
-      K.sheet(`${K.head("Enviar reporte")}<p class="muted">Elija cómo enviarlo. Kaleos lo deja marcado como enviado.</p>
+      const canMark = K.me.role === "pastor"; // la base solo deja al pastor marcarlo como enviado
+      K.sheet(`${K.head("Enviar reporte")}<p class="muted">Elija cómo enviarlo.${canMark ? " Kaleos lo deja marcado como enviado." : ""}</p>
         <a class="btn block" data-mark target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">${ic("chat", "sm")}Enviar por WhatsApp</a>
         <a class="btn sec block" data-mark href="mailto:${esc(ch.supervisor_email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}">Enviar por correo${ch.supervisor_email ? "" : " (falta el correo del supervisor)"}</a>
         <button class="btn sec block" id="cp">Copiar texto</button>`, (s, close) => {
         const mark = async () => {
-          await K.sb.from("kaleos_reports").upsert({ church_id: K.me.church_id, month: month + "-01", data: r, sent_at: new Date().toISOString(), sent_by: K.me.id }, { onConflict: "church_id,month" });
+          if (!canMark) return close();
+          const { error } = await K.sb.from("kaleos_reports").upsert({ church_id: K.me.church_id, month: month + "-01", data: r, sent_at: new Date().toISOString(), sent_by: K.me.id }, { onConflict: "church_id,month" });
+          if (error) return K.toast(K.errMsg(error), 4000);
           close(); setTimeout(() => K.mount(el, K.viewReport, month), 400);
         };
         K.on(s, "[data-mark]", mark);
-        $("#cp", s).addEventListener("click", () => navigator.clipboard.writeText(text).then(() => { K.toast("Reporte copiado"); mark(); }));
+        $("#cp", s).addEventListener("click", () => K.copy(text, "Reporte copiado").then((ok) => ok && mark()));
       });
     });
   };
