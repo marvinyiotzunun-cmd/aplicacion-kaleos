@@ -115,12 +115,15 @@
       <div class="chat" id="chat" aria-live="polite"></div>
       <div class="sugg">${SUGG.map(([k, l]) => `<button class="chip" data-ask="${k}" data-q="${esc(l)}">${esc(l)}</button>`).join("")}</div>
       <form class="askbar" id="askf"><input id="askq" placeholder="Pregúntele a Kaleos…" autocomplete="off" aria-label="Escriba su pedido"><button type="button" class="dict" id="mic" aria-label="Dictar">${ic("mic")}</button><button type="button" class="voice" id="voz" aria-label="Conversar por voz">${K.orbMark()}</button><button class="send" aria-label="Enviar" hidden>${ic("send")}</button></form>
-      <p class="fine">Toque la esfera para conversar con Kaleos por voz. Solo hace lo que la app permite, y nada se envía sin su «sí».</p>`;
+      <p class="fine">Toque la esfera para conversar con Kaleos por voz. Solo hace lo que la app permite, y nada se envía sin su «sí».</p>
+      <div class="vozpick"><label for="vozsel" class="fine">Voz de Kaleos</label><select class="inp" id="vozsel">${K.VOCES.map(([v, n]) => `<option value="${v}"${v === K.vozPref() ? " selected" : ""}>${esc(n)}</option>`).join("")}</select><button type="button" class="chip" id="vozprueba">Escuchar</button></div>`;
     drawChat(el);
     K.on(el, ".brief [data-ask], .sugg [data-ask]", (b) => ask(el, b.dataset.q, b.dataset.ask));
     const q = $("#askq", el), sendB = $("#askf .send", el), vozB = $("#voz", el);
     q.addEventListener("input", () => { const t = !!q.value.trim(); sendB.hidden = !t; vozB.hidden = t; });
     vozB.addEventListener("click", () => K.voiceStart());
+    $("#vozsel", el).addEventListener("change", (e) => K.setVozPref(e.target.value));
+    $("#vozprueba", el).addEventListener("click", () => K.decir(`Buenos días, ${(K.me.title || "pastor").toLowerCase()}. Soy Kaleos. ¿Quiere que le lea la agenda de hoy?`));
     $("#askf", el).addEventListener("submit", (e) => { e.preventDefault(); const v = $("#askq", el).value.trim(); if (v) { q.value = ""; q.dispatchEvent(new Event("input")); ask(el, v); } });
     $("#mic", el).addEventListener("click", () => {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

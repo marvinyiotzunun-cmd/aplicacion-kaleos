@@ -1,7 +1,8 @@
 /* Kaleos: conversación por voz con el asistente del pastor.
    Con la clave de OpenAI usa la voz en tiempo real (WebRTC, como el modo de voz de ChatGPT);
    la clave vive en la función kaleos-voz y el teléfono solo recibe un pase de un minuto.
-   Sin clave, conversa con el dictado y la voz del navegador. */
+   Sin clave, conversa con el dictado y la voz humana de Kaleos (kaleos-habla, ElevenLabs);
+   si tampoco hay clave de ElevenLabs, usa la voz más natural que tenga el teléfono. */
 (function () {
   "use strict";
   const K = window.K, { esc, $, ic } = K;
@@ -40,7 +41,8 @@
   function loop() {
     if (!S) return;
     const lv = (an) => { if (!an) return 0; const d = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); let t = 0; for (const x of d) t += x; return t / d.length / 255; };
-    const v = Math.min(1, Math.max(lv(S.inA) * (S.muted ? 0 : 1), lv(S.outA) * 1.3) * 2.4);
+    const talk = S.talk ? 0.18 + 0.12 * Math.abs(Math.sin(performance.now() / 160)) : 0;
+    const v = Math.min(1, Math.max(lv(S.inA) * (S.muted ? 0 : 1), lv(S.outA) * 1.3, talk) * 2.4);
     S.lv = S.lv * 0.7 + v * 0.3;
     S.o.style.setProperty("--lv", S.lv.toFixed(3));
     S.raf = requestAnimationFrame(loop);
@@ -168,13 +170,13 @@
     if (!SR) { K.voiceStop(); return K.toast("Este navegador no permite conversar por voz. Escriba su pedido.", 4000); }
     $("#vmode", S.o).textContent = "Kaleos · modo básico";
     if (K.P.sec !== "asistente") K.pastorGo("asistente");
-    const sp = window.speechSynthesis;
-    const speak = (text) => new Promise((res) => {
-      if (!sp || !text) return res();
-      const u = new SpeechSynthesisUtterance(text.slice(0, 320)); u.lang = "es-MX"; u.rate = 1.02;
-      const v = sp.getVoices().find((x) => /^es/i.test(x.lang)); if (v) u.voice = v;
-      u.onend = u.onerror = res; status("Hablando", "speak"); caption(text.slice(0, 220)); sp.speak(u);
-    });
+    const speak = async (text) => {
+      if (!text) return;
+      status("Hablando", "speak"); caption(text.slice(0, 220));
+      S.talk = true;
+      await K.decir(text.slice(0, 700));
+      if (S) S.talk = false;
+    };
     let rec = null;
     const listen = () => {
       if (!S || S.muted) return;
@@ -193,7 +195,7 @@
       };
       status("Le escucho", "listen"); rec.start();
     };
-    S.tap = () => { if (sp) sp.cancel(); try { rec && rec.abort(); } catch (_) {} setTimeout(listen, 120); };
+    S.tap = () => { K.callar(); try { rec && rec.abort(); } catch (_) {} setTimeout(listen, 120); };
     S.mute = (m) => { if (m) { try { rec && rec.abort(); } catch (_) {} } else listen(); };
     speak("Le escucho, pastor. ¿En qué le ayudo?").then(listen);
   }
@@ -217,7 +219,7 @@
     try { s.dc && s.dc.close(); s.pc && s.pc.close(); } catch (_) {}
     if (s.stream) s.stream.getTracks().forEach((t) => t.stop());
     try { s.rec && s.rec.abort(); } catch (_) {}
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    K.callar();
     try { s.ac && s.ac.close(); } catch (_) {}
     s.o.classList.remove("in"); setTimeout(() => s.o.remove(), 250);
     if (K.mode === "pastor" && K.P.sec === "asistente") K.pastorGo("asistente");
