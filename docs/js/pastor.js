@@ -18,10 +18,11 @@
   const age = (b) => { if (!b || String(b).startsWith("1900")) return null; const t = K.today(); let a = +t.slice(0, 4) - +String(b).slice(0, 4); if (t.slice(5) < String(b).slice(5, 10)) a--; return a; };
 
   // ===== Asistente =====
-  const SUGG = [["hoy", "¿Qué tengo hoy?"], ["cumple", "¿Quién cumple años esta semana?"], ["pedidos", "Pedidos pendientes"], ["aviso", "Preparar un aviso"], ["versiculo", "Hacer una imagen con un versículo"]];
+  const SUGG = [["hoy", "¿Qué tengo hoy?"], ["cumple", "¿Quién cumple años esta semana?"], ["pedidos", "Pedidos pendientes"], ["aviso", "Preparar un aviso"], ["versiculo", "Hacer una imagen con un versículo"], ["campana", "Preparar una campaña"]];
   const kmsg = (html, data) => ({ who: "k", html, data });
   function classify(raw) {
     const t = raw.toLowerCase();
+    if (/campa[ñn]a|escuela b[ií]blica|\bebv\b|congreso|cruzada/.test(t)) return { action: "campana", args: { title: /escuela b[ií]blica|\bebv\b/.test(t) ? "ebv" : /evangel/.test(t) ? "evangelistica" : /misi/.test(t) ? "misiones" : /joven|juvenil|congreso/.test(t) ? "jovenes" : /oraci/.test(t) ? "oracion" : /aniversario/.test(t) ? "aniversario" : "" } };
     if (/cumple/.test(t)) return { action: "cumple" };
     if (/pedido|oraci|orar|visita/.test(t)) return { action: "pedidos" };
     if (/recu[eé]rd|recordatorio|anota/.test(t)) return { action: "recordatorio", args: { title: K.cap(raw.replace(/^(recu[eé]rdame( que)?|recordatorio:?|anota)\s*/i, "")) } };
@@ -73,6 +74,10 @@
     if (a.action === "versiculo") {
       const g = a.args || {};
       return kmsg(`${pre || "<p>Abro el estudio de versículos. Elija el texto, el estilo y la composición; yo preparo la imagen.</p>"}<div class="row"><button class="btn sm gold" data-vers="1">${ic("versiculos", "sm")}Abrir estudio</button></div>`, { vers: g });
+    }
+    if (a.action === "campana") {
+      const pre = (a.args || {}).title || "";
+      return kmsg(`<p>Escriba el tema, la descripción y las fechas; yo preparo los diseños para antes, durante y después de la campaña, cada uno con su texto para WhatsApp.</p><div class="row"><button class="btn sm gold" data-camp-new="${esc(pre)}">${ic("avisos", "sm")}Nueva campaña</button><button class="btn sec sm" data-go="campanas">Ver campañas</button></div>`);
     }
     return kmsg(`<p>${esc(a.reply || "No le entendí bien. ¿Me lo dice de otra forma?")}</p>`);
   }
@@ -137,6 +142,7 @@
       const t = e.target.closest("button"); if (!t) return;
       const m = P.chat[+(t.closest("[data-mi]") || {}).dataset?.mi] || {};
       if (t.dataset.go) return setSec(t.dataset.go);
+      if (t.dataset.campNew !== undefined) return K.campForm(null, { preset: t.dataset.campNew || null }, (row) => { K.campState.open = row.id; setSec("campanas"); });
       if (t.dataset.card) { const p = (await K.everyone()).find((x) => x.id === t.dataset.card); if (p) K.greetBirthday(p); return; }
       if (t.dataset.ann) return K.annSheet({ prefill: m.data && m.data.ann, after: () => { K.bust("upcoming"); P.chat.push(kmsg("<p><b>Listo.</b> El aviso quedó publicado en Kaleos.</p>")); drawChat(el); } });
       if (t.dataset.rem) {
@@ -260,9 +266,10 @@
     });
   }
   async function viewAgenda(el) {
-    const [people, reqs, evs, rems, comms, cal] = await Promise.all([K.everyone(), requests(), upcoming(), reminders(), K.communities(), K.calendar()]);
+    const [people, reqs, evs, rems, comms, cal, camps] = await Promise.all([K.everyone(), requests(), upcoming(), reminders(), K.communities(), K.calendar(), K.campaigns()]);
     const t = K.today(); if (!P.day) P.day = t;
     const days = Array.from({ length: 7 }, (_, i) => K.addDays(t, i));
+    const campOn = (d) => camps.flatMap((c) => K.campPlan(c).filter((p) => p.date === d).map((p) => ({ c, p })));
     const itemsOf = (d) => [
       ...evs.filter((e) => K.dayOf(e.event_at) === d).map((e) => ({ h: K.fmtTime(e.event_at), t: e.title, k: e.community_id ? (comms.find((c) => c.id === e.community_id) || {}).name || "Comunidad" : e.levels ? "Reunión" : "Iglesia", ann: e.id })),
       ...rems.filter((r) => K.dayOf(r.due_at) === d || (d === t && K.dayOf(r.due_at) < t)).map((r) => ({ h: K.dayOf(r.due_at) < t ? "Pendiente" : K.fmtTime(r.due_at), t: r.title, k: "Recordatorio", rem: r.id })),
@@ -270,16 +277,18 @@
       ...K.calendarOn(cal, d).filter((c) => !evs.some((e) => K.dayOf(e.event_at) === d && K.plainName(e.title) === K.plainName(c.title)))
         .map((c) => ({ h: K.calendarTime(c), t: c.title, k: c.verified ? "Calendario" : "Calendario · por confirmar", note: c.notes })),
       ...people.filter((p) => p.active && p.birthday && String(p.birthday).slice(5, 10) === d.slice(5)).map((p) => ({ h: "Todo el día", t: "Cumpleaños de " + p.full_name, k: p.dir ? "Felicitar · directorio" : "Felicitar", bday: p.id })),
+      ...campOn(d).map(({ c, p }) => ({ h: "Compartir", t: `${p.name} · ${c.title}`, k: (c.shared || {})[p.key] ? "Campaña · ya compartido" : "Campaña", camp: c.id, piece: p.key })),
     ].sort((a, b) => a.h.localeCompare(b.h));
     el.innerHTML = `<div class="sec-h"><h2>Agenda</h2><button class="btn sm" id="newrem">${ic("plus", "xs")}Recordatorio</button></div>
       <div class="week">${days.map((d) => `<button class="wd" data-day="${d}" aria-pressed="${P.day === d}">${K.cap(K.weekdayOf(d).slice(0, 3))}<b>${+d.slice(8)}</b><i class="${itemsOf(d).length ? "" : "no"}"></i></button>`).join("")}</div>
       <div><div class="dayh">${esc(K.cap(K.weekdayOf(P.day)))} ${+P.day.slice(8)} de ${K.MONTHS[+P.day.slice(5, 7) - 1]}</div>
-      ${itemsOf(P.day).map((x) => `<div class="ev"><span class="h">${esc(x.h)}</span><div style="flex:1"><span class="tag">${esc(x.k)}</span><h3>${esc(x.t)}</h3>${x.note ? `<span class="muted" style="font-size:13px">${esc(x.note)}</span>` : ""}</div>${x.rem ? `<button class="btn sec sm" data-done="${x.rem}">${ic("check", "xs")}Hecho</button>` : x.bday ? `<button class="btn sm" data-bday="${x.bday}">Felicitar</button>` : ""}</div>`).join("") || '<p class="muted">Nada agendado.</p>'}</div>
+      ${itemsOf(P.day).map((x) => `<div class="ev"><span class="h">${esc(x.h)}</span><div style="flex:1"><span class="tag">${esc(x.k)}</span><h3>${esc(x.t)}</h3>${x.note ? `<span class="muted" style="font-size:13px">${esc(x.note)}</span>` : ""}</div>${x.rem ? `<button class="btn sec sm" data-done="${x.rem}">${ic("check", "xs")}Hecho</button>` : x.bday ? `<button class="btn sm" data-bday="${x.bday}">Felicitar</button>` : x.camp ? `<button class="btn sm" data-camp="${x.camp}" data-piece="${x.piece}">Ver diseño</button>` : ""}</div>`).join("") || '<p class="muted">Nada agendado.</p>'}</div>
       <button class="btn sec block" id="newann">${ic("avisos", "sm")}Nuevo aviso o invitación</button>`;
     K.on(el, "[data-day]", (b) => { P.day = b.dataset.day; K.mount(el, viewAgenda); });
     $("#newrem", el).addEventListener("click", () => reminderSheet(null, () => K.mount(el, viewAgenda)));
     $("#newann", el).addEventListener("click", () => K.annSheet({ prefill: { when: K.gtISO(P.day, "19:00") }, after: () => { K.bust("upcoming"); K.mount(el, viewAgenda); } }));
     K.on(el, "[data-bday]", (b) => { const p = people.find((x) => x.id === b.dataset.bday); if (p) K.greetBirthday(p); });
+    K.on(el, "[data-camp]", (b) => K.campOpen(b.dataset.camp, b.dataset.piece, () => K.mount(el, viewAgenda)));
     K.on(el, "[data-done]", async (b) => {
       const { error } = await K.sb.from("kaleos_reminders").update({ done: true }).eq("id", b.dataset.done);
       if (error) return K.toast(K.errMsg(error));
@@ -425,13 +434,14 @@
     ["hermanos", "Hermanos", "hermanos", () => "Bitácora y niveles"],
     ["comunidades", "Comunidades", "comunidades", () => "Avisos y orientaciones"],
     ["saludos", "Saludos", "saludos", () => "Tarjetas de cumpleaños y aniversarios"],
+    ["campanas", "Campañas", "avisos", () => "Diseños para toda una campaña"],
     ["mayordomia", "Mayordomía", "dar", () => "Ofrendar, donar y proyectos"],
     ["controles", "Controles", "informes", () => "Estadísticas, ingresos y proyectos"],
     ["reporte", "Reporte", "reporte", () => "Reporte ministerial del mes"],
     ["iglesia", "Iglesia", "iglesia", () => "Aviso de la semana y datos"],
   ];
   const VIEWS = { asistente: viewAsistente, versiculos: viewVersiculos, pedidos: viewPedidos, agenda: viewAgenda, hermanos: viewHermanos,
-    comunidades: (el) => K.viewComms(el, true, P), saludos: K.viewGreetings, mayordomia: viewMayordomia, controles: viewControles, reporte: K.viewReport, iglesia: viewIglesia };
+    comunidades: (el) => K.viewComms(el, true, P), saludos: K.viewGreetings, campanas: K.viewCampanas, mayordomia: viewMayordomia, controles: viewControles, reporte: K.viewReport, iglesia: viewIglesia };
   function header() {
     return K.dd("psec", { cls: "secdd", icon: SECS.find((s) => s[0] === P.sec)[2], options: () => SECS.map(([v, l, i, s]) => ({ v, l, icon: i, s: s() })), value: () => P.sec, pick: (v) => setSec(v) }) +
       `<span style="margin-left:auto"></span>${K.userMenu()}`;
