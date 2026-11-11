@@ -25,14 +25,15 @@ Nota: en el proyecto nuevo los números 2 a 5 se corrieron juntos como SQL direc
 | Función | Qué hace | Estado | Fecha |
 | --- | --- | --- | --- |
 | `kaleos-admin` | Alta de hermanos y cambio de PIN | aplicado | 2026-11-11 |
-| `kaleos-asistente` | Asistente con IA | aplicado | 2026-11-11 |
+| `kaleos-asistente` | Asistente con IA (Claude de Anthropic desde el 2026-11-11) | aplicado | 2026-11-11 |
 | `kaleos-voz` | Voz con IA | aplicado | 2026-11-11 |
 
 ## Secretos (Edge Functions → Secrets)
 
 | Secreto | Lo usan | Estado |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | `kaleos-asistente`, `kaleos-voz` | pendiente en el proyecto nuevo (lo guarda Marvin) |
+| `ANTHROPIC_API_KEY` | `kaleos-asistente` (y la voz básica, que pasa por el asistente) | pendiente en el proyecto nuevo (lo guarda Marvin) |
+| `OPENAI_API_KEY` | `kaleos-voz` (voz en tiempo real; opcional: sin ella la app usa la voz del navegador) | no se usa por ahora |
 | `KALEOS_SETUP_KEY` | `kaleos-admin` (solo para crear el primer pastor) | pendiente en el proyecto nuevo: hace falta para crear el primer pastor |
 
 La clave nunca se escribe en este archivo.

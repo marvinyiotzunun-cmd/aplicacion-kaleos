@@ -1,7 +1,9 @@
-// Kaleos: asistente del pastor con ChatGPT (OpenAI).
+// Kaleos: asistente del pastor con Claude (Anthropic).
 // Solo elige una acción de una lista cerrada; la app la muestra y nada se envía sin el «sí» del pastor.
-// Necesita el secreto OPENAI_API_KEY (y opcionalmente OPENAI_MODEL) en las Edge Functions de Supabase.
+// Necesita el secreto ANTHROPIC_API_KEY (y opcionalmente ANTHROPIC_MODEL) en las Edge Functions de Supabase.
+// Sin clave responde «sin_clave» y la app usa sus respuestas locales.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import Anthropic from "npm:@anthropic-ai/sdk@1.1.0";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +30,7 @@ Nunca envías nada: la app le pide confirmación al pastor. Si no sabes algo, di
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
-  const key = Deno.env.get("OPENAI_API_KEY");
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return json({ error: "sin_clave" }, 503);
 
   const auth = req.headers.get("Authorization") ?? "";
@@ -69,23 +71,35 @@ Deno.serve(async (req) => {
       .map((p: any) => ({ nombre: p.full_name, dia: String(p.birthday).slice(5, 10) })),
   };
 
-  const history = (b.history ?? []).slice(-6).map((h) => ({ role: h.who === "me" ? "user" : "assistant", content: String(h.text).slice(0, 600) }));
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
-      temperature: 0.3,
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "system", content: "Datos de Kaleos: " + JSON.stringify(context) },
-        ...history,
-        { role: "user", content: text },
+  const history = (b.history ?? []).slice(-6).map((h) => ({ role: h.who === "me" ? "user" : "assistant", content: String(h.text).slice(0, 600) }))
+    .filter((h) => h.content.trim());
+  // La API pide que la conversación empiece con el usuario y alterne turnos.
+  const messages: Anthropic.Beta.BetaMessageParam[] = [];
+  for (const h of [...history, { role: "user", content: text }] as { role: "user" | "assistant"; content: string }[]) {
+    const last = messages[messages.length - 1];
+    if (!last && h.role !== "user") continue;
+    if (last && last.role === h.role) last.content += "\n" + h.content;
+    else messages.push({ role: h.role, content: h.content });
+  }
+
+  const nullable = { anyOf: [{ type: "string" }, { type: "null" }] };
+  const client = new Anthropic({ apiKey: key });
+  let res: Anthropic.Beta.BetaMessage;
+  try {
+    res = await client.beta.messages.create({
+      model: Deno.env.get("ANTHROPIC_MODEL") ?? "claude-opus-5-5",
+      max_tokens: 4000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system: [
+        { type: "text", text: SYSTEM },
+        { type: "text", text: "Datos de Kaleos: " + JSON.stringify(context) },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "accion", strict: true,
+      messages,
+      output_config: {
+        effort: "low",
+        format: {
+          type: "json_schema",
           schema: {
             type: "object", additionalProperties: false, required: ["action", "reply", "args"],
             properties: {
@@ -94,25 +108,25 @@ Deno.serve(async (req) => {
               args: {
                 type: "object", additionalProperties: false,
                 required: ["title", "body", "when", "place", "community", "ref", "text"],
-                properties: {
-                  title: { type: ["string", "null"] }, body: { type: ["string", "null"] }, when: { type: ["string", "null"] },
-                  place: { type: ["string", "null"] }, community: { type: ["string", "null"] },
-                  ref: { type: ["string", "null"] }, text: { type: ["string", "null"] },
-                },
+                properties: { title: nullable, body: nullable, when: nullable, place: nullable, community: nullable, ref: nullable, text: nullable },
               },
             },
           },
         },
       },
-    }),
-  });
-  if (!r.ok) return json({ error: "ChatGPT no respondió (" + r.status + ")" }, 502);
-  const out = await r.json();
+    });
+  } catch (e) {
+    const status = e instanceof Anthropic.APIError ? e.status : 0;
+    return json({ error: "Claude no respondió (" + (status || "sin conexión") + ")" }, 502);
+  }
+  const fallback = { action: "responder", reply: "No le entendí bien. ¿Me lo dice de otra forma?", args: {} };
+  if (res.stop_reason === "refusal" || res.stop_reason === "max_tokens") return json(fallback);
   try {
-    const a = JSON.parse(out.choices[0].message.content);
+    const out = res.content.find((c) => c.type === "text");
+    const a = JSON.parse(out && out.type === "text" ? out.text : "");
     if (!ACTIONS.includes(a.action)) a.action = "responder";
     return json(a);
   } catch {
-    return json({ action: "responder", reply: "No le entendí bien. ¿Me lo dice de otra forma?", args: {} });
+    return json(fallback);
   }
 });
