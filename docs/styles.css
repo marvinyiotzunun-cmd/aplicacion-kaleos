@@ -575,3 +575,6 @@ a.li{text-decoration:none;color:inherit}
 .voz.min .vbtn .ic{width:18px;height:18px}
 .ctl-view .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ctl-view .panels,.ctl-view .pgrid{grid-template-columns:minmax(0,1fr)}
+/* elegir la voz de Kaleos */
+.vozpick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.vozpick select.inp{flex:1 1 180px;min-width:0;padding-top:8px;padding-bottom:8px}

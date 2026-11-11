@@ -101,15 +101,88 @@
     return data;
   };
   K.qrSvg = (text) => { const q = window.qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); };
-  K.speak = (text) => {
-    if (!("speechSynthesis" in window)) return K.toast("Este teléfono no puede leer en voz alta");
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "es-GT";
-    const v = speechSynthesis.getVoices().find((x) => x.lang && x.lang.startsWith("es"));
-    if (v) u.voice = v;
-    u.rate = 0.95; speechSynthesis.speak(u);
+  // ===== voz de Kaleos =====
+  // Primero la voz humana (ElevenLabs, función kaleos-habla); si no hay clave o falla, la mejor voz del teléfono.
+  K.VOCES = [["michelle", "Michelle · guatemalteca"], ["ana", "Ana María · mexicana"], ["antonio", "Antonio · latino"], ["roberto", "Roberto · voz grave"], ["telefono", "Voz del teléfono (gratis)"]];
+  K.vozPref = () => { try { return localStorage.getItem("kaleos-voz") || "michelle"; } catch (_) { return "michelle"; } };
+  K.setVozPref = (v) => { try { localStorage.setItem("kaleos-voz", v); } catch (_) {} };
+  let humana = true, audio = null; // humana = false después de un «sin_clave» para no preguntar en cada frase
+  // las voces más naturales primero: Natural/Online/Neural (Edge), Google, Premium/Mejorada (iPhone); español latino antes que de España
+  const rankVoz = (v) => {
+    const n = (v.name || "") + " " + (v.voiceURI || ""), l = (v.lang || "").toLowerCase();
+    let r = 0;
+    if (/natural|online|neural/i.test(n)) r += 60;
+    if (/premium|mejorad|enhanced|siri/i.test(n)) r += 45;
+    if (/google/i.test(n)) r += 30;
+    if (/dalia|jorge|marta|andres|andrés|paulina|m[oó]nica|sabina|valentina|elena/i.test(n)) r += 10;
+    if (/es[-_](gt|mx|us|419|co|pe|cr|hn|sv|ni|pa)/.test(l)) r += 20; else if (/es[-_]es/.test(l)) r += 5;
+    if (/compact|espeak|robot/i.test(n)) r -= 50;
+    if (v.localService === false) r += 5;
+    return r;
   };
+  K.mejorVoz = () => {
+    if (!("speechSynthesis" in window)) return null;
+    const vs = speechSynthesis.getVoices().filter((v) => /^es/i.test(v.lang || ""));
+    return vs.sort((a, b) => rankVoz(b) - rankVoz(a))[0] || null;
+  };
+  if ("speechSynthesis" in window) { speechSynthesis.getVoices(); speechSynthesis.addEventListener && speechSynthesis.addEventListener("voiceschanged", () => speechSynthesis.getVoices()); }
+  const vozTelefono = (text) => new Promise((res) => {
+    if (!("speechSynthesis" in window)) { K.toast("Este teléfono no puede leer en voz alta"); return res(); }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text), v = K.mejorVoz();
+    u.lang = v ? v.lang : "es-MX"; if (v) u.voice = v;
+    u.rate = 0.98; u.pitch = 1;
+    u.onend = u.onerror = () => res();
+    speechSynthesis.speak(u);
+  });
+  async function vozHumana(text, voz) {
+    const cfg = window.KALEOS_CONFIG || {};
+    const { data } = await K.sb.auth.getSession();
+    const tok = data && data.session ? data.session.access_token : cfg.anonKey;
+    const r = await fetch(cfg.url + "/functions/v1/kaleos-habla", {
+      method: "POST", headers: { Authorization: "Bearer " + tok, apikey: cfg.anonKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voz }),
+    });
+    if (r.status === 503 || r.status === 404) { humana = false; throw new Error("sin_clave"); }
+    if (!r.ok) throw new Error("sin_voz");
+    return URL.createObjectURL(await r.blob());
+  }
+  // un solo reproductor, desbloqueado con el primer toque (iPhone no deja sonar audio que llega después sin un toque previo)
+  const player = new Audio(); player.preload = "auto";
+  const SILENCIO = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+  const unlock = () => { try { player.src = SILENCIO; const p = player.play(); if (p) p.catch(() => {}); } catch (_) {} document.removeEventListener("pointerdown", unlock, true); };
+  document.addEventListener("pointerdown", unlock, true);
+  let turno = 0, fin = null;
+  K.callar = () => {
+    turno++;
+    if (fin) { const f = fin; fin = null; f(true); }
+    try { player.pause(); } catch (_) {}
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+  };
+  // Dice el texto y se resuelve cuando termina.
+  K.decir = async (text, { voz = K.vozPref() } = {}) => {
+    text = String(text || "").replace(/\s+/g, " ").trim().slice(0, 700);
+    if (!text) return;
+    K.callar();
+    const mio = ++turno;
+    if (voz !== "telefono" && humana && K.sb) {
+      let url = null;
+      try { url = await vozHumana(text, voz); } catch (_) { /* sin clave o sin internet: voz del teléfono */ }
+      if (mio !== turno) { if (url) URL.revokeObjectURL(url); return; } // lo callaron mientras llegaba
+      if (url) {
+        const ok = await new Promise((res) => {
+          fin = res;
+          player.onended = () => res(true); player.onerror = () => res(false);
+          player.src = url;
+          const p = player.play(); if (p) p.catch(() => res(false));
+        });
+        fin = null; URL.revokeObjectURL(url);
+        if (ok || mio !== turno) return;
+      }
+    }
+    if (mio === turno) return vozTelefono(text);
+  };
+  K.speak = (text) => { K.decir(text); };
   K.confetti = () => {
     const box = document.createElement("div"); box.className = "confetti";
     const cols = ["#B8893B", "#F3DC9B", "#1E2650", "#85304A", "#2D6A86"];
