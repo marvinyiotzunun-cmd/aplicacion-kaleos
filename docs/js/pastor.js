@@ -15,7 +15,7 @@
     return people.filter((p) => p.active && p.birthday && set.has(String(p.birthday).slice(5, 10)) && p.id !== K.me.id)
       .map((p) => ({ p, in: set.get(String(p.birthday).slice(5, 10)) })).sort((a, b) => a.in - b.in);
   };
-  const age = (b) => { if (!b) return null; const t = K.today(); let a = +t.slice(0, 4) - +String(b).slice(0, 4); if (t.slice(5) < String(b).slice(5, 10)) a--; return a; };
+  const age = (b) => { if (!b || String(b).startsWith("1900")) return null; const t = K.today(); let a = +t.slice(0, 4) - +String(b).slice(0, 4); if (t.slice(5) < String(b).slice(5, 10)) a--; return a; };
 
   // ===== Asistente =====
   const SUGG = [["hoy", "¿Qué tengo hoy?"], ["cumple", "¿Quién cumple años esta semana?"], ["pedidos", "Pedidos pendientes"], ["aviso", "Preparar un aviso"], ["versiculo", "Hacer una imagen con un versículo"]];
@@ -31,13 +31,14 @@
     return { action: "responder", reply: "Puedo ayudarle con su agenda, los pedidos, los cumpleaños, avisos, recordatorios y versículos. Pruebe con una de las sugerencias de abajo." };
   }
   async function answer(a) {
-    const [people, reqs, evs, rems] = await Promise.all([K.people(), requests(), upcoming(), reminders()]);
+    const [people, reqs, evs, rems, cal] = await Promise.all([K.everyone(), requests(), upcoming(), reminders(), K.calendar()]);
     const t = K.today(), open = reqs.filter((r) => r.status !== "atendida"), nuevos = reqs.filter((r) => r.status === "nueva");
     const pre = a.reply ? `<p>${esc(a.reply)}</p>` : "";
     if (a.action === "hoy") {
       const items = [
         ...evs.filter((e) => K.dayOf(e.event_at) === t).map((e) => [K.fmtTime(e.event_at), e.title, e.place || "Actividad"]),
         ...rems.filter((r) => K.dayOf(r.due_at) <= t).map((r) => [K.dayOf(r.due_at) < t ? "Pendiente" : K.fmtTime(r.due_at), r.title, "Recordatorio"]),
+        ...K.calendarOn(cal, t).map((c) => [K.calendarTime(c), c.title, c.verified ? "Calendario de la iglesia" : "Calendario de la iglesia · por confirmar"]),
         ...bdaysWithin(people, 1).map(({ p }) => ["Todo el día", "Cumpleaños de " + p.full_name, "Felicitar"]),
         ...open.filter((r) => r.kind === "visita").map((r) => [r.for_date ? K.fmtDate(r.for_date, "ds") : "Visita", "Visita a " + (r.for_name || r.who?.full_name || ""), esc(r.note || "Pidió visita")]),
       ];
@@ -101,7 +102,7 @@
     requestAnimationFrame(() => { const c = $("#chatEnd", el); if (c) c.scrollIntoView({ block: "center", behavior: "smooth" }); });
   }
   async function viewAsistente(el) {
-    const [people, reqs, evs] = await Promise.all([K.people(), requests(), upcoming()]);
+    const [people, reqs, evs] = await Promise.all([K.everyone(), requests(), upcoming()]);
     const nuevos = reqs.filter((r) => r.status === "nueva").length, today = bdaysWithin(people, 1), next = evs.find((e) => new Date(e.event_at) > new Date());
     const h = +new Date().toLocaleString("en-US", { timeZone: K.TZ, hour: "numeric", hour12: false });
     if (!P.chat.length) P.chat.push(kmsg(`<p>Tengo listo su resumen del día. ¿Por dónde empezamos?</p>`));
@@ -136,7 +137,7 @@
       const t = e.target.closest("button"); if (!t) return;
       const m = P.chat[+(t.closest("[data-mi]") || {}).dataset?.mi] || {};
       if (t.dataset.go) return setSec(t.dataset.go);
-      if (t.dataset.card) { const p = (await K.people()).find((x) => x.id === t.dataset.card); if (p) K.greetBirthday(p); return; }
+      if (t.dataset.card) { const p = (await K.everyone()).find((x) => x.id === t.dataset.card); if (p) K.greetBirthday(p); return; }
       if (t.dataset.ann) return K.annSheet({ prefill: m.data && m.data.ann, after: () => { K.bust("upcoming"); P.chat.push(kmsg("<p><b>Listo.</b> El aviso quedó publicado en Kaleos.</p>")); drawChat(el); } });
       if (t.dataset.rem) {
         t.disabled = true;
@@ -259,19 +260,21 @@
     });
   }
   async function viewAgenda(el) {
-    const [people, reqs, evs, rems, comms] = await Promise.all([K.people(), requests(), upcoming(), reminders(), K.communities()]);
+    const [people, reqs, evs, rems, comms, cal] = await Promise.all([K.everyone(), requests(), upcoming(), reminders(), K.communities(), K.calendar()]);
     const t = K.today(); if (!P.day) P.day = t;
     const days = Array.from({ length: 7 }, (_, i) => K.addDays(t, i));
     const itemsOf = (d) => [
       ...evs.filter((e) => K.dayOf(e.event_at) === d).map((e) => ({ h: K.fmtTime(e.event_at), t: e.title, k: e.community_id ? (comms.find((c) => c.id === e.community_id) || {}).name || "Comunidad" : e.levels ? "Reunión" : "Iglesia", ann: e.id })),
       ...rems.filter((r) => K.dayOf(r.due_at) === d || (d === t && K.dayOf(r.due_at) < t)).map((r) => ({ h: K.dayOf(r.due_at) < t ? "Pendiente" : K.fmtTime(r.due_at), t: r.title, k: "Recordatorio", rem: r.id })),
       ...reqs.filter((r) => r.kind === "visita" && r.status !== "atendida" && r.for_date === d).map((r) => ({ h: "Visita", t: "Visita a " + (r.for_name || r.who?.full_name || ""), k: "Pedido" })),
-      ...people.filter((p) => p.active && p.birthday && String(p.birthday).slice(5, 10) === d.slice(5)).map((p) => ({ h: "Todo el día", t: "Cumpleaños de " + p.full_name, k: "Felicitar", bday: p.id })),
+      ...K.calendarOn(cal, d).filter((c) => !evs.some((e) => K.dayOf(e.event_at) === d && K.plainName(e.title) === K.plainName(c.title)))
+        .map((c) => ({ h: K.calendarTime(c), t: c.title, k: c.verified ? "Calendario" : "Calendario · por confirmar", note: c.notes })),
+      ...people.filter((p) => p.active && p.birthday && String(p.birthday).slice(5, 10) === d.slice(5)).map((p) => ({ h: "Todo el día", t: "Cumpleaños de " + p.full_name, k: p.dir ? "Felicitar · directorio" : "Felicitar", bday: p.id })),
     ].sort((a, b) => a.h.localeCompare(b.h));
     el.innerHTML = `<div class="sec-h"><h2>Agenda</h2><button class="btn sm" id="newrem">${ic("plus", "xs")}Recordatorio</button></div>
       <div class="week">${days.map((d) => `<button class="wd" data-day="${d}" aria-pressed="${P.day === d}">${K.cap(K.weekdayOf(d).slice(0, 3))}<b>${+d.slice(8)}</b><i class="${itemsOf(d).length ? "" : "no"}"></i></button>`).join("")}</div>
       <div><div class="dayh">${esc(K.cap(K.weekdayOf(P.day)))} ${+P.day.slice(8)} de ${K.MONTHS[+P.day.slice(5, 7) - 1]}</div>
-      ${itemsOf(P.day).map((x) => `<div class="ev"><span class="h">${esc(x.h)}</span><div style="flex:1"><span class="tag">${esc(x.k)}</span><h3>${esc(x.t)}</h3></div>${x.rem ? `<button class="btn sec sm" data-done="${x.rem}">${ic("check", "xs")}Hecho</button>` : x.bday ? `<button class="btn sm" data-bday="${x.bday}">Felicitar</button>` : ""}</div>`).join("") || '<p class="muted">Nada agendado.</p>'}</div>
+      ${itemsOf(P.day).map((x) => `<div class="ev"><span class="h">${esc(x.h)}</span><div style="flex:1"><span class="tag">${esc(x.k)}</span><h3>${esc(x.t)}</h3>${x.note ? `<span class="muted" style="font-size:13px">${esc(x.note)}</span>` : ""}</div>${x.rem ? `<button class="btn sec sm" data-done="${x.rem}">${ic("check", "xs")}Hecho</button>` : x.bday ? `<button class="btn sm" data-bday="${x.bday}">Felicitar</button>` : ""}</div>`).join("") || '<p class="muted">Nada agendado.</p>'}</div>
       <button class="btn sec block" id="newann">${ic("avisos", "sm")}Nuevo aviso o invitación</button>`;
     K.on(el, "[data-day]", (b) => { P.day = b.dataset.day; K.mount(el, viewAgenda); });
     $("#newrem", el).addEventListener("click", () => reminderSheet(null, () => K.mount(el, viewAgenda)));
@@ -286,20 +289,36 @@
 
   // ===== Hermanos =====
   async function viewHermanos(el) {
-    const people = await K.people();
+    const [people, all] = await Promise.all([K.people(), K.everyone()]);
+    const dir = all.filter((p) => p.dir);
     const draw = () => {
       const q = P.hq.toLowerCase();
+      const dl = P.hl === "todos" ? dir.filter((p) => (p.full_name + " " + (p.nickname || "")).toLowerCase().includes(q)) : [];
+      $("#dl", el).innerHTML = dl.length ? `<div class="eyebrow" style="margin-top:8px">Directorio · aún sin cuenta en Kaleos</div>` + dl.map((p) => `<button class="li" data-dir="${p.id}"><span class="avatar">${esc(K.ini(p.full_name))}</span><span class="g"><b>${esc(p.full_name)}</b><span class="s">${esc([p.role_label, p.birthday ? "cumple el " + K.fmtDate(p.birthday, "dm") : "", p.confidence === "alta" ? "" : "por confirmar"].filter(Boolean).join(" · "))}</span></span></button>`).join("") : "";
+      K.on($("#dl", el), "[data-dir]", (b) => dirSheet(dir.find((x) => x.id === b.dataset.dir)));
       const list = people.filter((p) => (P.hl === "todos" || p.level === P.hl) && (p.full_name + " " + p.member_no).toLowerCase().includes(q));
       $("#hl", el).innerHTML = list.map((p) => `<button class="li" data-person="${p.id}"><span class="avatar">${esc(K.ini(p.full_name))}</span><span class="g"><b>${esc(p.full_name)}</b><span class="s">${esc(p.member_no)}${p.role !== "member" ? " · " + K.ROLE_NAME[p.role] : ""}${p.active ? "" : " · inactivo"}</span></span>${K.levelPill(p.level)}</button>`).join("") || '<p class="empty">Nadie con ese nombre.</p>';
       K.on($("#hl", el), "[data-person]", (b) => personSheet(b.dataset.person, () => K.mount(el, viewHermanos)));
     };
     el.innerHTML = `<div class="sec-h"><h2>Hermanos</h2>${K.dd("hl", { right: true, options: () => [{ v: "todos", l: "Todos los niveles" }, ...K.LEVELS.map(([v, l]) => ({ v, l }))], value: () => P.hl, pick: (v) => { P.hl = v; K.mount(el, viewHermanos); } })}</div>
       <div class="row"><label class="search" style="max-width:none;flex:1">${ic("search")}<input id="hq" placeholder="Buscar por nombre o número" value="${esc(P.hq)}" aria-label="Buscar hermano"></label><button class="btn sm" id="add">${ic("plus", "xs")}Agregar</button></div>
-      <p class="fine" style="margin-top:-14px">${people.filter((p) => p.active).length} hermanos en Kaleos</p>
-      <div class="list" id="hl"></div>`;
+      <p class="fine" style="margin-top:-14px">${people.filter((p) => p.active).length} hermanos en Kaleos${dir.length ? ` y ${dir.length} en el directorio` : ""}</p>
+      <div class="list" id="hl"></div><div class="list" id="dl"></div>`;
     $("#hq", el).addEventListener("input", (e) => { P.hq = e.target.value; draw(); });
     $("#add", el).addEventListener("click", () => K.editPerson(null, () => K.mount(el, viewHermanos)));
     draw();
+  }
+  // Ficha de alguien del directorio (sin cuenta): datos precargados, para confirmar con la persona
+  function dirSheet(p) {
+    if (!p) return;
+    const facts = [["Cumpleaños", p.birthday ? K.fmtDate(p.birthday, "dm") + (p.birth_year ? " de " + p.birth_year : "") : "—"], ["Teléfono", p.phone || "—"], ["Dato", p.confidence === "alta" ? "Confirmado en la página" : "Por confirmar"]];
+    K.sheet(`${K.head(p.full_name, [p.title, p.nickname ? "«" + p.nickname + "»" : ""].filter(Boolean).join(" "))}
+      <div class="facts">${facts.map(([k, v]) => `<div><span class="eyebrow">${k}</span><b${k === "Teléfono" ? ' class="mono" style="font-size:12.5px"' : ""}>${esc(v)}</b></div>`).join("")}</div>
+      ${p.role_label ? `<p>${esc(p.role_label)}</p>` : ""}${p.notes ? `<p class="muted">${esc(p.notes)}</p>` : ""}
+      <p class="fine">Fuente: ${esc(p.source || "precarga")}. Confirme los datos con la persona antes de crearle su cuenta.</p>
+      <div class="row" style="flex-wrap:wrap">${p.birthday ? `<button class="btn sm" id="dcard">${ic("felicitacion", "xs")}Tarjeta de cumpleaños</button>` : ""}${p.phone ? `<a class="btn sec sm" href="${K.waLink(p.phone, "")}" target="_blank" rel="noopener">${ic("chat", "xs")}WhatsApp</a><a class="btn sec sm" href="tel:${esc(K.phoneDigits(p.phone))}">${ic("llamar", "xs")}Llamar</a>` : ""}</div>`, (s, close) => {
+      const b = $("#dcard", s); if (b) b.addEventListener("click", () => { close(); setTimeout(() => K.greetBirthday(p), 300); });
+    });
   }
   async function personSheet(id, after) {
     const p = (await K.people()).find((x) => x.id === id); if (!p) return;

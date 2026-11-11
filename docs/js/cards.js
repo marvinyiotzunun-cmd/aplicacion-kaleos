@@ -308,6 +308,7 @@
     return has.whatsapp ? "whatsapp" : has.correo ? "correo" : "app";
   };
   function deliveryNote(to) {
+    if (to.dir) return to.phone ? `${esc(K.first(to.full_name))} aún no tiene cuenta en Kaleos: le llega por <b>WhatsApp</b> (${esc(to.phone)}).` : `${esc(K.first(to.full_name))} aún no tiene cuenta ni teléfono: descargue la imagen y compártala usted.`;
     const ch = K.channelFor(to);
     return `Le llega a ${esc(K.first(to.full_name))} en su app de Kaleos` +
       (ch === "whatsapp" ? ` y por <b>WhatsApp</b> (${esc(to.phone)}).` : ch === "correo" ? ` y por <b>correo</b> (${esc(to.email)}).` : ".");
@@ -317,8 +318,7 @@
   K.sendCard = async (opt) => {
     try { await K.cardReady(); } catch (_) { return K.toast("No se pudo preparar la tarjeta. Revise la conexión."); }
     let to = opt.to;
-    const { data } = await K.sb.from("kaleos_profiles").select("*").eq("id", to.id).maybeSingle();
-    if (data) to = data;
+    if (!to.dir) { const { data } = await K.sb.from("kaleos_profiles").select("*").eq("id", to.id).maybeSingle(); if (data) to = data; }
     let tpl = opt.tpl, vi = 0, file = null, edited = false;
     const slug = K.first(to.full_name).normalize("NFD").replace(/[^\w]/g, "").toLowerCase() || "kaleos", fname = `tarjeta-${slug}.png`;
     K.sheet(`${K.head(opt.title, opt.eyebrow)}
@@ -352,10 +352,12 @@
         if (!file) return K.toast("Un momento, la tarjeta se está preparando…");
         const btn = e.currentTarget, text = gm.value;
         btn.disabled = true;
-        // 1) Siempre queda en «Mis mensajes» del hermano
-        const { error } = await K.sb.from("kaleos_messages").insert({ church_id: K.me.church_id, profile_id: to.id, kind: "felicitacion",
-          title: opt.msgTitle, body: text, card: { tpl, c: opt.card(vi) }, created_by: K.me.id });
-        if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
+        // 1) Siempre queda en «Mis mensajes» del hermano (si ya tiene cuenta)
+        if (!to.dir) {
+          const { error } = await K.sb.from("kaleos_messages").insert({ church_id: K.me.church_id, profile_id: to.id, kind: "felicitacion",
+            title: opt.msgTitle, body: text, card: { tpl, c: opt.card(vi) }, created_by: K.me.id });
+          if (error) { btn.disabled = false; return K.toast(K.errMsg(error), 4000); }
+        } else if (!to.phone) { download(); K.toast("Imagen descargada"); close(); if (opt.after) opt.after(); return; }
         // 2) Además, por el medio que el hermano prefiere
         const ch = K.channelFor(to);
         if (ch === "whatsapp") {
@@ -364,7 +366,7 @@
         } else if (ch === "correo") {
           location.href = `mailto:${encodeURIComponent(to.email)}?subject=${encodeURIComponent(opt.msgTitle + " · " + K.churchShort())}&body=${encodeURIComponent(text + "\n\nVea la tarjeta en Kaleos: " + location.origin + location.pathname)}`;
         }
-        if (opt.log) { try { await opt.log(tpl, text); } catch (err) { K.toast(K.errMsg(err), 4000); } }
+        if (opt.log && !to.dir) { try { await opt.log(tpl, text); } catch (err) { K.toast(K.errMsg(err), 4000); } }
         K.toast(`Enviado a ${K.first(to.full_name)}`);
         close(); if (opt.after) opt.after();
       });
@@ -414,7 +416,7 @@
   // ===== vista Saludos (pastor) =====
   K.viewGreetings = async (el) => {
     const [members, sp, gr] = await Promise.all([
-      K.people(),
+      K.everyone(),
       K.sb.from("kaleos_special_dates").select("*").eq("church_id", K.me.church_id),
       K.sb.from("kaleos_greetings").select("profile_id, occasion, occasion_date, sent_at").eq("church_id", K.me.church_id).gte("occasion_date", K.addDays(K.today(), -7)),
     ]);
@@ -432,7 +434,7 @@
       <div class="field"><label for="sig">Firma al pie de cada tarjeta</label><div class="row"><input class="inp" id="sig" value="${esc(greetSignature())}"><button class="btn sec" id="ssig">Guardar</button></div></div>
       <p class="fine">Agregue el aniversario de bodas y la fecha de bautismo en la ficha de cada hermano.</p>`;
     K.on(el, "[data-i]", (b) => K.greetSheet(list[b.dataset.i], again));
-    $("#addsp", el).addEventListener("click", () => specialSheet(members, again));
+    $("#addsp", el).addEventListener("click", () => specialSheet(members.filter((m) => !m.dir), again));
     $("#ssig", el).addEventListener("click", async () => {
       const v = $("#sig", el).value.trim() || null;
       const { data, error } = await K.sb.from("kaleos_churches").update({ greeting_signature: v }).eq("id", K.me.church_id).select().single();

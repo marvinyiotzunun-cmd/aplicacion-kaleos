@@ -25,6 +25,7 @@ Solo puedes elegir UNA de estas acciones (no inventes otras):
 - "recordatorio": guardar un recordatorio privado del pastor. Llena args.title y args.when (ISO).
 - "versiculo": abrir el estudio para hacer una imagen con un versículo. Si el pastor nombra uno, pon args.ref y args.text (Reina-Valera 1960).
 - "responder": contestar algo con los datos dados, sin acción.
+Para fechas y reuniones de la iglesia usa calendario_iglesia; si verified es falso, dilo como «por confirmar». Los cumpleaños con sin_cuenta son de hermanos que aún no tienen cuenta en Kaleos.
 Nunca envías nada: la app le pide confirmación al pastor. Si no sabes algo, dilo. No des consejería ni enseñanza: Kaleos es solo informativo.`;
 
 Deno.serve(async (req) => {
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
 
   // Lo que el asistente puede saber (todo pasa por las reglas de la base: solo lo que el pastor ya ve)
   const now = new Date();
-  const [reqs, msgs, comms, rems, people] = await Promise.all([
+  const [reqs, msgs, comms, rems, people, dir, cal] = await Promise.all([
     sb.from("kaleos_prayer_requests").select("kind, note, for_name, for_date, status, created_at, who:kaleos_profiles!profile_id(full_name)")
       .eq("church_id", me.church_id).neq("status", "atendida").order("created_at", { ascending: false }).limit(20),
     sb.from("kaleos_messages").select("title, event_at, place").eq("church_id", me.church_id).is("profile_id", null)
@@ -57,7 +58,16 @@ Deno.serve(async (req) => {
     sb.from("kaleos_communities").select("slug, name").eq("church_id", me.church_id).order("sort"),
     sb.from("kaleos_reminders").select("title, due_at").eq("owner_id", me.id).eq("done", false).order("due_at").limit(10),
     sb.from("kaleos_profiles").select("full_name, birthday").eq("church_id", me.church_id).eq("active", true).not("birthday", "is", null),
+    sb.from("kaleos_directory").select("full_name, birthday_month, birthday_day").eq("church_id", me.church_id).is("profile_id", null).not("birthday_month", "is", null),
+    sb.from("kaleos_calendar").select("month, day, title, rule, recurrence, verified").eq("church_id", me.church_id).order("month").order("day"),
   ]);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const known = new Set((people.data ?? []).map((p: any) => String(p.full_name).toLowerCase()));
+  const bdays = [
+    ...(people.data ?? []).map((p: any) => ({ nombre: p.full_name, dia: String(p.birthday).slice(5, 10) })),
+    ...(dir.data ?? []).filter((d: any) => !known.has(String(d.full_name).toLowerCase()))
+      .map((d: any) => ({ nombre: d.full_name, dia: pad2(d.birthday_month) + "-" + pad2(d.birthday_day), sin_cuenta: true })),
+  ];
   const md = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }).slice(5);
   const soon = new Set(Array.from({ length: 8 }, (_, i) => md(new Date(now.getTime() + i * 86400000))));
   const context = {
@@ -67,8 +77,9 @@ Deno.serve(async (req) => {
     proximas_actividades: msgs.data ?? [],
     comunidades: comms.data ?? [],
     recordatorios: rems.data ?? [],
-    cumpleanos_proximos: (people.data ?? []).filter((p: any) => soon.has(String(p.birthday).slice(5, 10)))
-      .map((p: any) => ({ nombre: p.full_name, dia: String(p.birthday).slice(5, 10) })),
+    cumpleanos_proximos: bdays.filter((b) => soon.has(b.dia)),
+    // Calendario de la iglesia: mes y día (o la regla, si es semanal o mensual). «verified» falso = por confirmar con el pastor.
+    calendario_iglesia: cal.data ?? [],
   };
 
   const history = (b.history ?? []).slice(-6).map((h) => ({ role: h.who === "me" ? "user" : "assistant", content: String(h.text).slice(0, 600) }))

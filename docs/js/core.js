@@ -706,6 +706,47 @@
     return data || [];
   });
   K.people = () => K.load("people", () => K.rows(K.sb.from("kaleos_profiles").select("*").eq("church_id", K.me.church_id).order("full_name")));
+
+  // Directorio de la iglesia: hermanos que aún no tienen cuenta (precarga de Facebook y WhatsApp).
+  // Solo lo ven el pastor y Secretaría. Sin año de nacimiento, el cumpleaños se guarda con el año 1900.
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const plainName = (K.plainName = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim());
+  K.directory = () => K.load("dir", async () => {
+    if (!K.isStaff()) return [];
+    const rows = await K.rows(K.sb.from("kaleos_directory").select("*").eq("church_id", K.me.church_id).is("profile_id", null).order("full_name"));
+    return rows.map((d) => ({ ...d, id: "dir:" + d.id, dir_id: d.id, dir: true, active: true, role: "member", member_no: "", level: null,
+      birthday: d.birthday_month && d.birthday_day ? `${d.birth_year || 1900}-${pad2(d.birthday_month)}-${pad2(d.birthday_day)}` : null }));
+  });
+  // Hermanos con cuenta más los del directorio que todavía no la tienen (para cumpleaños, agenda y saludos)
+  K.everyone = async () => {
+    const [people, dir] = await Promise.all([K.people(), K.directory()]);
+    const have = new Set(people.map((p) => plainName(p.full_name)));
+    return [...people, ...dir.filter((d) => !have.has(plainName(d.full_name)))];
+  };
+
+  // Calendario de la iglesia (aniversarios, actividades del año, reuniones fijas). Los hermanos solo ven lo verificado.
+  K.calendar = () => K.load("cal", () => K.rows(K.sb.from("kaleos_calendar").select("*").eq("church_id", K.me.church_id).order("month").order("day")));
+  const WDAYS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+  const ORDS = [["primer", 1], ["primera", 1], ["segundo", 2], ["segunda", 2], ["tercer", 3], ["tercera", 3], ["cuarto", 4], ["cuarta", 4]];
+  const has = (r, w) => new RegExp("(^|[^a-z])" + w + "([^a-z]|$)").test(r);
+  // Fechas del calendario que caen en el día d (AAAA-MM-DD)
+  K.calendarOn = (cal, d) => {
+    const [y, m, day] = d.split("-").map(Number), wd = new Date(Date.UTC(y, m - 1, day)).getUTCDay(), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return cal.filter((c) => {
+      if (c.month && c.month !== m) return false;
+      if (c.day) return c.day === day;
+      const r = plainName(c.rule), wds = WDAYS.map((w, i) => (has(r, w) ? i : -1)).filter((i) => i >= 0);
+      if (c.recurrence === "semanal") return wds[0] === wd;
+      if (c.recurrence !== "mensual") return false;
+      if (/primera semana/.test(r)) return day <= 7 && (/lunes a viernes/.test(r) ? wd >= 1 && wd <= 5 : true);
+      if (!wds.length || wds[0] !== wd) return false;
+      if (has(r, "ultimo")) return day + 7 > last;
+      const o = ORDS.find(([w]) => has(r, w));
+      return !!o && o[1] === Math.ceil(day / 7);
+    });
+  };
+  // Hora escrita en la regla («martes 19:00», «6:30 pm»), si la hay
+  K.calendarTime = (c) => { const t = String(c.rule || "").match(/\d{1,2}:\d{2}(\s*[ap]\.?\s*m\.?)?/i); return t ? t[0] : "Todo el día"; };
   K.funds = () => K.load("funds", async () => {
     const [funds, tot] = await Promise.all([
       K.rows(K.sb.from("kaleos_funds").select("*").eq("church_id", K.me.church_id).order("sort")),
